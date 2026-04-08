@@ -42,7 +42,7 @@ Download the following model files from Box and place them in the `PnIDAgent/` d
 | `best.pt` | Fine-tuned YOLO symbol detector | `PnIDAgent/best.pt` |
 | `best_model.pth` | Fine-tuned SAM2 segmentation model | `PnIDAgent/best_model.pth` |
 
-> **Box download link:** `<TBD — fill in your Box shared link>`
+> **Box download link:** https://inlbox.box.com/s/lpd4mfxshhb8okjccbnkrevvq6mkl9ic
 
 ### 3. Install dependencies
 

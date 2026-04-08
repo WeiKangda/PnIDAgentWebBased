@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P&ID Workspace</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div class="workspace">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <h2>P&ID Annotator</h2>
+            <span class="session-info" id="sessionInfo">Loading...</span>
+            <div class="actions">
+                <button class="btn" id="btnSaveAll" onclick="App.saveAll()">Save All</button>
+                <button class="btn primary" id="btnExport" onclick="App.exportZip()">Export ZIP</button>
+                <a href="/" class="btn">New Session</a>
+            </div>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="tab-bar" id="tabBar">
+            <div class="tab" data-tab="pipeline">Pipeline</div>
+            <div class="tab" data-tab="masks">Symbols</div>
+            <div class="tab" data-tab="classification">Classification</div>
+            <div class="tab" data-tab="text">Text</div>
+            <div class="tab" data-tab="lines">Lines</div>
+            <div class="tab" data-tab="graph">Graph</div>
+        </div>
+
+        <!-- Editor Toolbar (changes per tab) -->
+        <div class="editor-toolbar" id="editorToolbar"></div>
+
+        <!-- Main Content Area -->
+        <div class="main-area">
+            <!-- Canvas -->
+            <div class="canvas-container" id="canvasContainer">
+                <canvas id="mainCanvas"></canvas>
+                <!-- Zoom Controls -->
+                <div class="zoom-controls">
+                    <button class="zoom-btn" onclick="ImageViewer.zoomIn()" title="Zoom In (+)">+</button>
+                    <span class="zoom-level" id="zoomLevel">100%</span>
+                    <button class="zoom-btn" onclick="ImageViewer.zoomOut()" title="Zoom Out (-)">−</button>
+                    <button class="zoom-btn zoom-btn-wide" onclick="ImageViewer.fitToScreen()" title="Fit to Screen">Fit</button>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <span id="sidebarTitle">Details</span>
+                    <span id="sidebarCount"></span>
+                </div>
+                <div class="sidebar-content" id="sidebarContent"></div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <span id="statusMsg">Ready</span>
+            <span id="statusCoords"></span>
+        </div>
+    </div>
+
+    <script>const SESSION_ID = "{{ session_id }}";</script>
+    <script src="/static/lib/fabric.min.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/undoManager.js"></script>
+    <script src="/static/js/imageViewer.js"></script>
+    <script src="/static/js/maskEditor.js"></script>
+    <script src="/static/js/classifierEditor.js"></script>
+    <script src="/static/js/textEditor.js"></script>
+    <script src="/static/js/lineEditor.js"></script>
+    <script src="/static/js/graphViewer.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

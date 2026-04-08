@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P&ID Annotation Tool</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div class="landing">
+        <div class="landing-card">
+            <h1>P&ID Annotation Tool</h1>
+            <p>Upload a P&ID image for AI-assisted annotation, or upload existing results to continue editing.</p>
+
+            <!-- Mode 1: Upload Image -->
+            <div class="upload-zone" id="imageZone">
+                <div class="icon">&#128444;</div>
+                <h3>Upload P&ID Image</h3>
+                <p>PNG, JPG, TIFF, or PDF &mdash; the AI pipeline will detect symbols, text, and lines automatically</p>
+                <input type="file" id="imageInput" accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.pdf" style="display:none">
+            </div>
+
+            <div class="upload-separator">
+                <hr><span>OR</span><hr>
+            </div>
+
+            <!-- Mode 2: Upload Results ZIP -->
+            <div class="upload-zone" id="zipZone">
+                <div class="icon">&#128230;</div>
+                <h3>Upload Results Folder (ZIP)</h3>
+                <p>Upload a ZIP of previously generated results to continue annotation</p>
+                <input type="file" id="zipInput" accept=".zip" style="display:none">
+            </div>
+
+            <div class="upload-progress" id="uploadProgress">
+                <div class="bar"><div class="bar-fill" id="progressBar"></div></div>
+                <div class="msg" id="progressMsg">Uploading...</div>
+            </div>
+
+            <!-- PDF Page Selector (hidden by default) -->
+            <div id="pdfPageSelector" style="display:none">
+                <h3 style="color:#4fc3f7;margin-bottom:8px">Select a Page</h3>
+                <p style="color:#888;font-size:13px;margin-bottom:16px">This PDF has multiple pages. Click the page you want to use.</p>
+                <div id="pdfPageGrid" class="pdf-page-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const imageZone = document.getElementById('imageZone');
+        const zipZone = document.getElementById('zipZone');
+        const imageInput = document.getElementById('imageInput');
+        const zipInput = document.getElementById('zipInput');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const progressBar = document.getElementById('progressBar');
+        const progressMsg = document.getElementById('progressMsg');
+
+        // Click handlers
+        imageZone.addEventListener('click', () => imageInput.click());
+        zipZone.addEventListener('click', () => zipInput.click());
+
+        // Drag and drop
+        [imageZone, zipZone].forEach(zone => {
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+            zone.addEventListener('drop', e => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                if (!file) return;
+                if (zone === imageZone) uploadFile(file, '/api/upload/image');
+                else uploadFile(file, '/api/upload/results');
+            });
+        });
+
+        imageInput.addEventListener('change', e => {
+            if (e.target.files[0]) uploadFile(e.target.files[0], '/api/upload/image');
+        });
+        zipInput.addEventListener('change', e => {
+            if (e.target.files[0]) uploadFile(e.target.files[0], '/api/upload/results');
+        });
+
+        async function uploadFile(file, endpoint) {
+            uploadProgress.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressMsg.textContent = `Uploading ${file.name}...`;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', endpoint);
+
+                xhr.upload.addEventListener('progress', e => {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        progressBar.style.width = pct + '%';
+                        progressMsg.textContent = `Uploading ${file.name}... ${pct}%`;
+                    }
+                });
+
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data.mode === 'pdf_select') {
+                            // Multi-page PDF: show page selector
+                            progressBar.style.width = '100%';
+                            progressMsg.textContent = `PDF uploaded (${data.num_pages} pages). Select a page below.`;
+                            showPdfPageSelector(data.session_id, data.thumbnails);
+                        } else {
+                            progressMsg.textContent = 'Upload complete! Redirecting...';
+                            progressBar.style.width = '100%';
+                            window.location.href = '/workspace/' + data.session_id;
+                        }
+                    } else {
+                        const err = JSON.parse(xhr.responseText);
+                        progressMsg.textContent = 'Error: ' + (err.error || 'Upload failed');
+                        progressBar.style.width = '0%';
+                    }
+                };
+
+                xhr.onerror = () => {
+                    progressMsg.textContent = 'Network error. Please try again.';
+                };
+
+                xhr.send(formData);
+            } catch (err) {
+                progressMsg.textContent = 'Error: ' + err.message;
+            }
+        }
+        function showPdfPageSelector(sessionId, thumbnails) {
+            // Hide upload zones, show page selector
+            imageZone.style.display = 'none';
+            zipZone.style.display = 'none';
+            document.querySelector('.upload-separator').style.display = 'none';
+
+            const selector = document.getElementById('pdfPageSelector');
+            const grid = document.getElementById('pdfPageGrid');
+            selector.style.display = 'block';
+
+            grid.innerHTML = '';
+            thumbnails.forEach((t, i) => {
+                const item = document.createElement('div');
+                item.className = 'pdf-page-item';
+                item.title = `Page ${i + 1}`;
+                item.innerHTML = `<img src="${t.thumbnail}" alt="Page ${i + 1}"><div class="pdf-page-label">Page ${i + 1}</div>`;
+                item.addEventListener('click', () => selectPdfPage(sessionId, i, item));
+                grid.appendChild(item);
+            });
+        }
+
+        async function selectPdfPage(sessionId, pageNum, itemEl) {
+            // Highlight selected
+            document.querySelectorAll('.pdf-page-item').forEach(el => el.classList.remove('selected'));
+            itemEl.classList.add('selected');
+
+            progressMsg.textContent = `Converting page ${pageNum + 1}...`;
+            progressBar.style.width = '50%';
+
+            try {
+                const resp = await fetch('/api/upload/pdf-select', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId, page: pageNum }),
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    progressMsg.textContent = 'Page converted! Redirecting...';
+                    progressBar.style.width = '100%';
+                    window.location.href = '/workspace/' + data.session_id;
+                } else {
+                    progressMsg.textContent = 'Error: ' + (data.error || 'Conversion failed');
+                }
+            } catch (err) {
+                progressMsg.textContent = 'Error: ' + err.message;
+            }
+        }
+    </script>
+</body>
+</html>

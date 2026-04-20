@@ -59,6 +59,7 @@ const App = {
         });
         ImageViewer.canvas.on('mouse:up', opt => {
             if (opt.e.button !== 0 || opt.e.altKey) return;
+            if (ImageViewer._panMoved) return;
             const pointer = ImageViewer.canvas.getPointer(opt.e);
             if (this.currentTab === 'masks' && MaskEditor.drawMode) {
                 MaskEditor.onMouseUp(pointer);

@@ -40,27 +40,41 @@ const ImageViewer = {
             this._updateZoomDisplay();
         });
 
-        // Pan with middle mouse or alt+drag
+        // Pan with left-click drag, middle mouse, or alt+drag
         this.canvas.on('mouse:down', (opt) => {
             const e = opt.e;
-            if (e.button === 1 || e.altKey) {
+            // Check if a draw mode is active — don't pan during drawing
+            const drawModeActive = (typeof App !== 'undefined') && (
+                (App.currentTab === 'masks' && typeof MaskEditor !== 'undefined' && MaskEditor.drawMode) ||
+                (App.currentTab === 'text' && typeof TextEditor !== 'undefined' && TextEditor.drawMode) ||
+                (App.currentTab === 'lines' && typeof LineEditor !== 'undefined' && LineEditor.drawMode)
+            );
+            if (e.button === 1 || e.altKey || (e.button === 0 && !drawModeActive)) {
                 this.isPanning = true;
+                this._panMoved = false;
                 this.lastPosX = e.clientX;
                 this.lastPosY = e.clientY;
                 this.canvas.selection = false;
-                e.preventDefault();
+                if (e.button === 1 || e.altKey) e.preventDefault();
             }
         });
 
         this.canvas.on('mouse:move', (opt) => {
             if (this.isPanning) {
                 const e = opt.e;
-                const vpt = this.canvas.viewportTransform;
-                vpt[4] += e.clientX - this.lastPosX;
-                vpt[5] += e.clientY - this.lastPosY;
-                this.lastPosX = e.clientX;
-                this.lastPosY = e.clientY;
-                this.canvas.requestRenderAll();
+                const dx = e.clientX - this.lastPosX;
+                const dy = e.clientY - this.lastPosY;
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+                    this._panMoved = true;
+                }
+                if (this._panMoved) {
+                    const vpt = this.canvas.viewportTransform;
+                    vpt[4] += dx;
+                    vpt[5] += dy;
+                    this.lastPosX = e.clientX;
+                    this.lastPosY = e.clientY;
+                    this.canvas.requestRenderAll();
+                }
             }
             // Track coordinates
             if (this.onMouseMoveCallback) {
@@ -84,7 +98,7 @@ const ImageViewer = {
         });
 
         this.canvas.on('mouse:up', (opt) => {
-            if (this._clickPointer && Date.now() - this._clickTime < 300) {
+            if (this._clickPointer && !this._panMoved && Date.now() - this._clickTime < 300) {
                 const upPointer = this.canvas.getPointer(opt.e);
                 const dx = upPointer.x - this._clickPointer.x;
                 const dy = upPointer.y - this._clickPointer.y;

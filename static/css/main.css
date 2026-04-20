@@ -51,7 +51,8 @@ a:hover { text-decoration: underline; }
 .main-area { display: flex; flex: 1; overflow: hidden; }
 
 /* Canvas Area */
-.canvas-container { flex: 1; position: relative; background: #111; overflow: hidden; }
+.canvas-container { flex: 1; position: relative; background: #111; overflow: hidden; cursor: grab; }
+.canvas-container:active { cursor: grabbing; }
 .canvas-container canvas { display: block; }
 
 /* Zoom Controls */

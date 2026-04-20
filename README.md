@@ -14,9 +14,10 @@ A web-based annotation and digitization tool for Piping & Instrumentation Diagra
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.9
 - CUDA-capable GPU (recommended for ML pipeline)
 - Git
+- [uv](https://docs.astral.sh/uv/)
 
 ## Setup
 
@@ -44,29 +45,21 @@ Download the following model files from Box and place them in the `PnIDAgent/` d
 
 > **Box download link:** https://inlbox.box.com/s/lpd4mfxshhb8okjccbnkrevvq6mkl9ic
 
-### 3. Install dependencies
-
-Install PyTorch first with the appropriate CUDA version ([pytorch.org](https://pytorch.org/get-started/locally/)):
+### 3. Create environment with uv
 
 ```bash
-# Example for CUDA 11.8
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+uv venv pnid_env --python 3.9
+source pnid_env/bin/activate
 ```
 
-Install SAM2:
-
-```bash
-pip install git+https://github.com/facebookresearch/segment-anything-2.git
-```
-
-Install PnIDAgent dependencies and web app dependencies:
+### 4. Install dependencies
 
 ```bash
 pip install -r PnIDAgent/requirements.txt
 pip install -r requirements.txt
 ```
 
-### 4. Run the app
+### 5. Run the app
 
 ```bash
 python app.py

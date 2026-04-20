@@ -17,7 +17,10 @@ A web-based annotation and digitization tool for Piping & Instrumentation Diagra
 - Python 3.9
 - CUDA-capable GPU (recommended for ML pipeline)
 - Git
-- [uv](https://docs.astral.sh/uv/)
+- [uv](https://docs.astral.sh/uv/) — install with:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 
 ## Setup
 

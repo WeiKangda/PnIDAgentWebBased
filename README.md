@@ -58,8 +58,8 @@ source pnid_env/bin/activate
 ### 4. Install dependencies
 
 ```bash
-pip install -r PnIDAgent/requirements.txt
-pip install -r requirements.txt
+uv pip install -r PnIDAgent/requirements.txt
+uv pip install -r requirements.txt
 ```
 
 ### 5. Run the app

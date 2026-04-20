@@ -19,7 +19,11 @@ A web-based annotation and digitization tool for Piping & Instrumentation Diagra
 - Git
 - [uv](https://docs.astral.sh/uv/) — install with:
   ```bash
+  # macOS / Linux
   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+  # Windows
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
   ```
 
 ## Setup
@@ -52,7 +56,12 @@ Download the following model files from Box and place them in the `PnIDAgent/` d
 
 ```bash
 uv venv pnid_env --python 3.9
+
+# macOS / Linux
 source pnid_env/bin/activate
+
+# Windows
+pnid_env\Scripts\activate
 ```
 
 ### 4. Install dependencies

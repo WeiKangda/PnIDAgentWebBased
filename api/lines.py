@@ -416,8 +416,30 @@ def bulk_delete_lines(session_id):
 
     data['solid'] = solid
     data['dashed'] = dashed
-    # Reset directions since indices changed
-    data['directions'] = {}
+
+    # Re-index directions: remove deleted lines' keys and shift remaining indices
+    directions = data.get('directions', {})
+    new_directions = {}
+    for line_type_key in ('solid', 'dashed'):
+        removed = sorted([it['idx'] for it in items if it['type'] == line_type_key], reverse=False)
+        removed_set = set(removed)
+        for k, v in directions.items():
+            parts = k.rsplit('_', 1)
+            if len(parts) != 2 or parts[0] != line_type_key:
+                continue
+            old_idx = int(parts[1])
+            if old_idx in removed_set:
+                continue  # deleted
+            # Count how many removed indices are below this one
+            shift = sum(1 for r in removed if r < old_idx)
+            new_directions[f'{line_type_key}_{old_idx - shift}'] = v
+    # Keep directions from other types (if any) that weren't touched
+    for k, v in directions.items():
+        parts = k.rsplit('_', 1)
+        if len(parts) == 2 and parts[0] in ('solid', 'dashed'):
+            continue  # already handled above
+        new_directions[k] = v
+    data['directions'] = new_directions
 
     save_json_file(path, data)
 

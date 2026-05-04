@@ -33,24 +33,31 @@ const App = {
             document.getElementById('statusCoords').textContent =
                 `x: ${Math.round(pointer.x)}, y: ${Math.round(pointer.y)}`;
         };
+        ImageViewer.onViewportChangeCallback = () => {
+            if (this.currentTab === 'text' && TextEditor.editingIdx !== null) {
+                TextEditor._repositionTextInput();
+            }
+        };
 
         // Canvas mouse events for draw modes
+        // Skip draw-mode events when an interactive object (edit handle, rotation control) is targeted
         ImageViewer.canvas.on('mouse:down', opt => {
             if (opt.e.button !== 0 || opt.e.altKey) return;
+            if (opt.target && (opt.target.selectable || opt.target.evented)) return;
             const pointer = ImageViewer.canvas.getPointer(opt.e);
-            if (this.currentTab === 'masks' && MaskEditor.drawMode) {
+            if (this.currentTab === 'masks' && MaskEditor.drawMode && !MaskEditor.editMode) {
                 MaskEditor.onMouseDown(pointer);
             }
             if (this.currentTab === 'text' && TextEditor.drawMode) {
                 TextEditor.onMouseDown(pointer);
             }
-            if (this.currentTab === 'lines' && LineEditor.drawMode) {
+            if (this.currentTab === 'lines' && LineEditor.drawMode && !LineEditor.editMode) {
                 LineEditor.onMouseDown(pointer);
             }
         });
         ImageViewer.canvas.on('mouse:move', opt => {
             const pointer = ImageViewer.canvas.getPointer(opt.e);
-            if (this.currentTab === 'masks' && MaskEditor.drawMode) {
+            if (this.currentTab === 'masks' && MaskEditor.drawMode && !MaskEditor.editMode) {
                 MaskEditor.onMouseMove(pointer);
             }
             if (this.currentTab === 'text' && TextEditor.drawMode) {
@@ -60,8 +67,9 @@ const App = {
         ImageViewer.canvas.on('mouse:up', opt => {
             if (opt.e.button !== 0 || opt.e.altKey) return;
             if (ImageViewer._panMoved) return;
+            if (opt.target && (opt.target.selectable || opt.target.evented)) return;
             const pointer = ImageViewer.canvas.getPointer(opt.e);
-            if (this.currentTab === 'masks' && MaskEditor.drawMode) {
+            if (this.currentTab === 'masks' && MaskEditor.drawMode && !MaskEditor.editMode) {
                 MaskEditor.onMouseUp(pointer);
             }
             if (this.currentTab === 'text' && TextEditor.drawMode) {
@@ -189,19 +197,23 @@ const App = {
                 break;
             case 'masks':
                 toolbar.innerHTML = MaskEditor.getToolbar();
-                await MaskEditor.load();
+                if (MaskEditor._loaded) await MaskEditor._reload();
+                else { await MaskEditor.load(); MaskEditor._loaded = true; }
                 break;
             case 'classification':
                 toolbar.innerHTML = ClassifierEditor.getToolbar();
-                await ClassifierEditor.load();
+                if (ClassifierEditor._loaded) await ClassifierEditor._reload(true);
+                else { await ClassifierEditor.load(); ClassifierEditor._loaded = true; }
                 break;
             case 'text':
                 toolbar.innerHTML = TextEditor.getToolbar();
-                await TextEditor.load();
+                if (TextEditor._loaded) await TextEditor._reload();
+                else { await TextEditor.load(); TextEditor._loaded = true; }
                 break;
             case 'lines':
                 toolbar.innerHTML = LineEditor.getToolbar();
-                await LineEditor.load();
+                if (LineEditor._loaded) await LineEditor._reload();
+                else { await LineEditor.load(); LineEditor._loaded = true; }
                 break;
             case 'graph':
                 toolbar.innerHTML = '';
@@ -227,18 +239,23 @@ const App = {
                 if (this.currentTab === 'text') TextEditor.undo();
                 else if (this.currentTab === 'lines') LineEditor.undo();
                 else if (this.currentTab === 'masks') MaskEditor.undo();
+                else if (this.currentTab === 'classification') ClassifierEditor.undo();
+                else if (this.currentTab === 'graph') GraphViewer.undo();
             }
             if (e.key === 'y') {
                 e.preventDefault();
                 if (this.currentTab === 'text') TextEditor.redo();
                 else if (this.currentTab === 'lines') LineEditor.redo();
                 else if (this.currentTab === 'masks') MaskEditor.redo();
+                else if (this.currentTab === 'classification') ClassifierEditor.redo();
+                else if (this.currentTab === 'graph') GraphViewer.redo();
             }
         }
 
         if (e.key === 'Delete' || e.key === 'Backspace') {
             if (document.activeElement && (document.activeElement.tagName === 'INPUT' ||
                 document.activeElement.tagName === 'TEXTAREA')) return;
+            if (this.currentTab === 'graph' && GraphViewer.handleKeyDown(e)) return;
             if (this.currentTab === 'text') TextEditor.deleteSelected();
             else if (this.currentTab === 'lines') LineEditor.deleteSelected();
             else if (this.currentTab === 'masks') MaskEditor.deleteSelected();
@@ -274,6 +291,7 @@ const App = {
         }
 
         if (e.key === 'Escape') {
+            if (this.currentTab === 'graph' && GraphViewer.handleKeyDown(e)) return;
             if (this.currentTab === 'text') TextEditor.clearSelection();
             else if (this.currentTab === 'masks') MaskEditor.clearSelection();
             else if (this.currentTab === 'lines') {
@@ -375,6 +393,7 @@ const App = {
             step.classList.add('complete');
             step.querySelector('.step-status').textContent = 'Complete';
             await this.loadSessionStatus();
+            this._resetEditorLoaded();
             this._showPipelinePanel();
             this.showToast('Symbol detection complete!', 'success');
         } catch (e) {
@@ -401,6 +420,7 @@ const App = {
             step.classList.add('complete');
             step.querySelector('.step-status').textContent = 'Complete';
             await this.loadSessionStatus();
+            this._resetEditorLoaded();
             this._showPipelinePanel();
             this.showToast('Classification complete!', 'success');
         } catch (e) {
@@ -427,6 +447,7 @@ const App = {
             step.classList.add('complete');
             step.querySelector('.step-status').textContent = 'Complete';
             await this.loadSessionStatus();
+            this._resetEditorLoaded();
             this._showPipelinePanel();
             this.showToast('Text & line detection complete!', 'success');
         } catch (e) {
@@ -455,6 +476,7 @@ const App = {
                 step.querySelector('.step-status').textContent = 'Complete';
             }
             await this.loadSessionStatus();
+            this._resetEditorLoaded();
             this.showToast(`Digitization complete: ${result.nodes} nodes, ${result.links} links`, 'success');
 
             // If on graph tab, reload the graph view
@@ -495,6 +517,14 @@ const App = {
                 </div>
             `;
         }
+    },
+
+    /** Reset loaded flags so next tab switch does a full load (clears undo) */
+    _resetEditorLoaded() {
+        MaskEditor._loaded = false;
+        ClassifierEditor._loaded = false;
+        TextEditor._loaded = false;
+        LineEditor._loaded = false;
     },
 
     // Global actions

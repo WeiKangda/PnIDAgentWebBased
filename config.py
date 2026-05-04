@@ -2,6 +2,10 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# URL prefix for deployment behind a reverse proxy (e.g. "/pnid_anno").
+# Set the URL_PREFIX environment variable to configure. Empty string for local dev.
+URL_PREFIX = os.environ.get('URL_PREFIX', '').rstrip('/')
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 PNIDAGENT_DIR = os.path.join(BASE_DIR, 'PnIDAgent')
 

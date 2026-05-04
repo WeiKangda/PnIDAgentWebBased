@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>P&ID Workspace</title>
-    <link rel="stylesheet" href="/pnid_anno/static/css/main.css">
+    <link rel="stylesheet" href="{{ url_prefix }}/static/css/main.css">
 </head>
 <body>
     <div class="workspace">
@@ -15,7 +15,7 @@
             <div class="actions">
                 <button class="btn" id="btnSaveAll" onclick="App.saveAll()">Save All</button>
                 <button class="btn primary" id="btnExport" onclick="App.exportZip()">Export ZIP</button>
-                <a href="/pnid_anno" class="btn">New Session</a>
+                <a href="{{ url_prefix }}/" class="btn">New Session</a>
             </div>
         </div>
 
@@ -63,16 +63,19 @@
         </div>
     </div>
 
-    <script>const SESSION_ID = "{{ session_id }}";</script>
-    <script src="/pnid_anno/static/lib/fabric.min.js"></script>
-    <script src="/pnid_anno/static/js/api.js"></script>
-    <script src="/pnid_anno/static/js/undoManager.js"></script>
-    <script src="/pnid_anno/static/js/imageViewer.js"></script>
-    <script src="/pnid_anno/static/js/maskEditor.js"></script>
-    <script src="/pnid_anno/static/js/classifierEditor.js"></script>
-    <script src="/pnid_anno/static/js/textEditor.js"></script>
-    <script src="/pnid_anno/static/js/lineEditor.js"></script>
-    <script src="/pnid_anno/static/js/graphViewer.js"></script>
-    <script src="/pnid_anno/static/js/app.js"></script>
+    <script>
+        const SESSION_ID = "{{ session_id }}";
+        const URL_PREFIX = "{{ url_prefix }}";
+    </script>
+    <script src="{{ url_prefix }}/static/lib/fabric.min.js"></script>
+    <script src="{{ url_prefix }}/static/js/api.js"></script>
+    <script src="{{ url_prefix }}/static/js/undoManager.js"></script>
+    <script src="{{ url_prefix }}/static/js/imageViewer.js"></script>
+    <script src="{{ url_prefix }}/static/js/maskEditor.js"></script>
+    <script src="{{ url_prefix }}/static/js/classifierEditor.js"></script>
+    <script src="{{ url_prefix }}/static/js/textEditor.js"></script>
+    <script src="{{ url_prefix }}/static/js/lineEditor.js"></script>
+    <script src="{{ url_prefix }}/static/js/graphViewer.js"></script>
+    <script src="{{ url_prefix }}/static/js/app.js"></script>
 </body>
 </html>

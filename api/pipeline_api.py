@@ -124,14 +124,13 @@ def run_detection(session_id):
                         'center': [int(det.x_center), int(det.y_center)]
                     })
 
-                if masks:
-                    np.savez_compressed(
-                        masks_output,
-                        masks=np.array(masks),
-                        scores=np.array(scores),
-                        image_shape=image.shape,
-                        num_masks=len(masks)
-                    )
+                np.savez_compressed(
+                    masks_output,
+                    masks=np.array(masks) if masks else np.array([]),
+                    scores=np.array(scores) if scores else np.array([]),
+                    image_shape=image.shape,
+                    num_masks=len(masks)
+                )
 
                 results = {
                     'image_path': str(image_path),

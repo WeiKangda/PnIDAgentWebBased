@@ -11,6 +11,7 @@ const ImageViewer = {
     lastPosY: 0,
     onClickCallback: null,
     onMouseMoveCallback: null,
+    onViewportChangeCallback: null,
 
     init() {
         const container = document.getElementById('canvasContainer');
@@ -38,18 +39,22 @@ const ImageViewer = {
             this.canvas.zoomToPoint({ x: e.offsetX, y: e.offsetY }, zoom);
             this.canvas.requestRenderAll();
             this._updateZoomDisplay();
+            if (this.onViewportChangeCallback) this.onViewportChangeCallback();
         });
 
         // Pan with left-click drag, middle mouse, or alt+drag
         this.canvas.on('mouse:down', (opt) => {
             const e = opt.e;
-            // Check if a draw mode is active — don't pan during drawing
+            // Check if a draw mode or edit mode is active — don't pan during these
             const drawModeActive = (typeof App !== 'undefined') && (
                 (App.currentTab === 'masks' && typeof MaskEditor !== 'undefined' && MaskEditor.drawMode) ||
                 (App.currentTab === 'text' && typeof TextEditor !== 'undefined' && TextEditor.drawMode) ||
+                (App.currentTab === 'text' && typeof TextEditor !== 'undefined' && TextEditor.editingIdx !== null) ||
                 (App.currentTab === 'lines' && typeof LineEditor !== 'undefined' && LineEditor.drawMode)
             );
-            if (e.button === 1 || e.altKey || (e.button === 0 && !drawModeActive)) {
+            // Don't pan when clicking on an interactive Fabric object (e.g., edit handles, rotation control)
+            const clickedOnObject = opt.target && (opt.target.selectable || opt.target.evented);
+            if (e.button === 1 || e.altKey || (e.button === 0 && !drawModeActive && !clickedOnObject)) {
                 this.isPanning = true;
                 this._panMoved = false;
                 this.lastPosX = e.clientX;
@@ -74,6 +79,7 @@ const ImageViewer = {
                     this.lastPosX = e.clientX;
                     this.lastPosY = e.clientY;
                     this.canvas.requestRenderAll();
+                    if (this.onViewportChangeCallback) this.onViewportChangeCallback();
                 }
             }
             // Track coordinates

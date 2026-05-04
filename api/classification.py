@@ -25,6 +25,31 @@ def get_classification(session_id):
 
     # Include all symbols (both valid and discarded) — user has already edited masks
     symbols = data.get('symbols', []) + data.get('discarded_symbols', [])
+
+    # Sync bbox data from masks (sam2_results) — user may have edited/rotated bboxes
+    masks_path = find_file(session_dir, '_sam2_results.json')
+    bbox_synced = False
+    if masks_path:
+        masks_data = load_json_file(masks_path)
+        masks_by_id = {m['id']: m for m in masks_data.get('masks_info', [])}
+        sync_fields = ('bbox', 'center', 'area', 'angle', 'rotated_bbox')
+        for sym in symbols:
+            mid = sym.get('mask_id', sym.get('id'))
+            if mid not in masks_by_id:
+                continue
+            mask = masks_by_id[mid]
+            for field in sync_fields:
+                if field in mask:
+                    if sym.get(field) != mask[field]:
+                        sym[field] = mask[field]
+                        bbox_synced = True
+
+        # Persist synced data back to classification JSON
+        if bbox_synced:
+            data['symbols'] = symbols
+            data['discarded_symbols'] = []
+            save_json_file(path, data)
+
     clusters = {}
     for sym in symbols:
         cid = sym.get('cluster_id', 0)
@@ -271,6 +296,70 @@ def delete_symbols(session_id):
     })
 
 
+@classification_bp.route('/session/<session_id>/classification/merge', methods=['POST'])
+def merge_clusters(session_id):
+    """Merge multiple clusters into one target cluster."""
+    session_dir = get_session_dir(session_id)
+    if not session_dir:
+        return jsonify({'error': 'Session not found'}), 404
+
+    path = find_file(session_dir, '_classification.json')
+    if not path:
+        return jsonify({'error': 'No classification data found'}), 404
+
+    body = request.get_json() or {}
+    source_cluster_ids = body.get('source_cluster_ids', [])
+    target_cluster_id = body.get('target_cluster_id')
+    target_label = body.get('target_label', '').strip()
+
+    if not source_cluster_ids or len(source_cluster_ids) < 2:
+        return jsonify({'error': 'At least 2 cluster IDs are required'}), 400
+    if target_cluster_id is None:
+        return jsonify({'error': 'target_cluster_id is required'}), 400
+    if target_cluster_id not in source_cluster_ids:
+        return jsonify({'error': 'target_cluster_id must be one of the source clusters'}), 400
+
+    data = load_json_file(path)
+    all_symbols = data.get('symbols', []) + data.get('discarded_symbols', [])
+
+    source_set = set(source_cluster_ids)
+    merged_count = 0
+
+    # Determine label: use provided or keep target cluster's existing label
+    if not target_label:
+        for sym in all_symbols:
+            if sym.get('cluster_id') == target_cluster_id:
+                target_label = sym.get('category', 'Unknown')
+                break
+
+    # Reassign all symbols from source clusters to the target cluster
+    for sym in all_symbols:
+        if sym.get('cluster_id') in source_set:
+            sym['cluster_id'] = target_cluster_id
+            sym['category'] = target_label
+            merged_count += 1
+
+    # Update categories and metadata
+    categories = {}
+    for sym in all_symbols:
+        cat = sym.get('category', 'Unknown')
+        categories[cat] = categories.get(cat, 0) + 1
+    data['categories'] = categories
+    data['num_clusters'] = len(set(s.get('cluster_id', 0) for s in all_symbols))
+    data['symbols'] = all_symbols
+    data['discarded_symbols'] = []
+
+    save_json_file(path, data)
+
+    return jsonify({
+        'success': True,
+        'target_cluster_id': target_cluster_id,
+        'target_label': target_label,
+        'merged_symbols': merged_count,
+        'remaining_clusters': data['num_clusters'],
+    })
+
+
 @classification_bp.route('/session/<session_id>/classification/auto-label', methods=['POST'])
 def auto_label(session_id):
     """Auto-label clusters using CLIP embedding similarity against reference symbol images."""
@@ -476,6 +565,68 @@ def get_symbol_sets(session_id):
                 sets.append({'name': entry, 'count': count})
 
     return jsonify({'sets': sets})
+
+
+@classification_bp.route('/session/<session_id>/classification/bulk', methods=['PUT'])
+def bulk_update_classification(session_id):
+    """Bulk update classification data (for undo/redo).
+    Body: { clusters: [...], symbols: [...] }
+    Reconstructs the classification JSON from the frontend state.
+    """
+    session_dir = get_session_dir(session_id)
+    if not session_dir:
+        return jsonify({'error': 'Session not found'}), 404
+
+    path = find_file(session_dir, '_classification.json')
+    if not path:
+        return jsonify({'error': 'No classification data found'}), 404
+
+    body = request.get_json()
+    clusters = body.get('clusters', [])
+    symbols_from_frontend = body.get('symbols', [])
+
+    data = load_json_file(path)
+
+    # The frontend sends stripped symbols (no embeddings).
+    # Rebuild by matching mask_id/id and preserving embeddings from existing data.
+    existing_syms = data.get('symbols', []) + data.get('discarded_symbols', [])
+    embedding_map = {}
+    for sym in existing_syms:
+        key = sym.get('mask_id', sym.get('id'))
+        if 'embedding' in sym:
+            embedding_map[key] = sym['embedding']
+
+    # Build a mapping from cluster id -> label from the frontend clusters
+    cluster_labels = {}
+    cluster_symbol_ids = {}
+    for c in clusters:
+        cluster_labels[c['id']] = c.get('label', 'Unknown')
+        cluster_symbol_ids[c['id']] = set(c.get('symbol_ids', []))
+
+    # Reconstruct symbols with correct cluster assignments
+    rebuilt_symbols = []
+    for sym in symbols_from_frontend:
+        sym_key = sym.get('mask_id', sym.get('id'))
+        # Restore embedding if available
+        if sym_key in embedding_map and 'embedding' not in sym:
+            sym['embedding'] = embedding_map[sym_key]
+        rebuilt_symbols.append(sym)
+
+    # Update categories
+    categories = {}
+    for sym in rebuilt_symbols:
+        cat = sym.get('category', 'Unknown')
+        categories[cat] = categories.get(cat, 0) + 1
+
+    data['symbols'] = rebuilt_symbols
+    data['discarded_symbols'] = []
+    data['categories'] = categories
+    data['num_clusters'] = len(clusters)
+    data['num_symbols_valid'] = len(rebuilt_symbols)
+
+    save_json_file(path, data)
+
+    return jsonify({'success': True})
 
 
 @classification_bp.route('/session/<session_id>/classification/save', methods=['POST'])

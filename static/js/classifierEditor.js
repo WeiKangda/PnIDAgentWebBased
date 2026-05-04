@@ -7,6 +7,7 @@ const ClassifierEditor = {
     symbols: [],
     currentClusterIdx: 0,
     selectedSymbolIds: new Set(),
+    undoMgr: new UndoManager(),
     _overlayObjects: [],
 
     async load(preservePosition = false) {
@@ -16,18 +17,60 @@ const ClassifierEditor = {
             const data = await API.get(API.sessionUrl('/classification'));
             this.clusters = data.clusters || [];
             this.symbols = data.symbols || [];
-            if (prevClusterId !== null) {
-                const idx = this.clusters.findIndex(c => c.id === prevClusterId);
-                this.currentClusterIdx = idx >= 0 ? idx : Math.min(this.currentClusterIdx, this.clusters.length - 1);
-            } else {
-                this.currentClusterIdx = 0;
-            }
+            this.undoMgr.clear();
+            this._restoreClusterPosition(prevClusterId, preservePosition);
             this.selectedSymbolIds.clear();
             this.renderOverlay();
             this.updateSidebar();
         } catch (e) {
             this.showNoData();
         }
+    },
+
+    /** Reload data from server without clearing undo history */
+    async _reload(preservePosition = false) {
+        try {
+            const prevClusterId = preservePosition && this.clusters[this.currentClusterIdx]
+                ? this.clusters[this.currentClusterIdx].id : null;
+            const data = await API.get(API.sessionUrl('/classification'));
+            this.clusters = data.clusters || [];
+            this.symbols = data.symbols || [];
+            this._restoreClusterPosition(prevClusterId, preservePosition);
+            this.selectedSymbolIds.clear();
+            this.renderOverlay();
+            this.updateSidebar();
+        } catch (e) {
+            this.showNoData();
+        }
+    },
+
+    _restoreClusterPosition(prevClusterId, preservePosition) {
+        if (preservePosition && prevClusterId !== null) {
+            const idx = this.clusters.findIndex(c => c.id === prevClusterId);
+            this.currentClusterIdx = idx >= 0 ? idx : Math.min(this.currentClusterIdx, this.clusters.length - 1);
+        } else if (!preservePosition) {
+            this.currentClusterIdx = 0;
+        }
+    },
+
+    /** Get Fabric rect positioning props for a symbol (supports rotated_bbox) */
+    _symRectProps(sym) {
+        if (sym.rotated_bbox && sym.rotated_bbox.angle) {
+            const rb = sym.rotated_bbox;
+            return {
+                left: rb.cx, top: rb.cy,
+                originX: 'center', originY: 'center',
+                width: rb.width, height: rb.height,
+                angle: rb.angle,
+            };
+        }
+        const [x1, y1, x2, y2] = sym.bbox;
+        return {
+            left: (x1 + x2) / 2, top: (y1 + y2) / 2,
+            originX: 'center', originY: 'center',
+            width: x2 - x1, height: y2 - y1,
+            angle: 0,
+        };
     },
 
     renderOverlay() {
@@ -44,7 +87,7 @@ const ClassifierEditor = {
         // Draw all symbols, dimmed if not in current cluster
         for (const sym of this.symbols) {
             if (!sym.bbox) continue;
-            const [x1, y1, x2, y2] = sym.bbox;
+            const pos = this._symRectProps(sym);
             const symKey = sym.mask_id !== undefined ? sym.mask_id : sym.id;
             const inCurrent = currentSymIds.has(symKey);
             const isSelected = this.selectedSymbolIds.has(symKey);
@@ -57,8 +100,8 @@ const ClassifierEditor = {
                 // Selected symbol: outer glow ring
                 const pad = 6;
                 const glow = new fabric.Rect({
-                    left: x1 - pad, top: y1 - pad,
-                    width: (x2 - x1) + pad * 2, height: (y2 - y1) + pad * 2,
+                    ...pos,
+                    width: pos.width + pad * 2, height: pos.height + pad * 2,
                     fill: 'transparent', stroke: '#FFD700', strokeWidth: 3,
                     strokeDashArray: [6, 3],
                     opacity: 0.9, selectable: false, evented: false,
@@ -66,7 +109,7 @@ const ClassifierEditor = {
                 ImageViewer.addObject(glow);
 
                 const rect = new fabric.Rect({
-                    left: x1, top: y1, width: x2 - x1, height: y2 - y1,
+                    ...pos,
                     fill: '#FFD70044', stroke: '#FFD700', strokeWidth: 3,
                     opacity: 1, selectable: false, evented: false,
                 });
@@ -75,7 +118,7 @@ const ClassifierEditor = {
             } else if (inCurrent) {
                 // Current cluster symbol: visible highlight
                 const rect = new fabric.Rect({
-                    left: x1, top: y1, width: x2 - x1, height: y2 - y1,
+                    ...pos,
                     fill: `${baseColor}33`, stroke: baseColor, strokeWidth: 2,
                     opacity: 1, selectable: false, evented: false,
                 });
@@ -84,7 +127,7 @@ const ClassifierEditor = {
             } else {
                 // Other cluster: dimmed
                 const rect = new fabric.Rect({
-                    left: x1, top: y1, width: x2 - x1, height: y2 - y1,
+                    ...pos,
                     fill: 'transparent', stroke: baseColor, strokeWidth: 1,
                     opacity: 0.15, selectable: false, evented: false,
                 });
@@ -217,6 +260,24 @@ const ClassifierEditor = {
         // Don't auto-zoom, just fit to screen - user can zoom manually
     },
 
+    _pointInSym(px, py, sym) {
+        const [x1, y1, x2, y2] = sym.bbox;
+        const angle = sym.angle || (sym.rotated_bbox && sym.rotated_bbox.angle) || 0;
+        if (angle === 0) {
+            return px >= x1 && px <= x2 && py >= y1 && py <= y2;
+        }
+        const rb = sym.rotated_bbox;
+        const cx = rb ? rb.cx : (x1 + x2) / 2;
+        const cy = rb ? rb.cy : (y1 + y2) / 2;
+        const hw = (rb ? rb.width : (x2 - x1)) / 2;
+        const hh = (rb ? rb.height : (y2 - y1)) / 2;
+        const rad = -angle * Math.PI / 180;
+        const dx = px - cx, dy = py - cy;
+        const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
+        const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
+        return lx >= -hw && lx <= hw && ly >= -hh && ly <= hh;
+    },
+
     onClick(pointer) {
         // Click on canvas to select/deselect a symbol in current cluster
         const cluster = this.clusters[this.currentClusterIdx];
@@ -226,8 +287,7 @@ const ClassifierEditor = {
         for (const sym of this.symbols) {
             const symKey = sym.mask_id !== undefined ? sym.mask_id : sym.id;
             if (!currentSymIds.has(symKey) || !sym.bbox) continue;
-            const [x1, y1, x2, y2] = sym.bbox;
-            if (pointer.x >= x1 && pointer.x <= x2 && pointer.y >= y1 && pointer.y <= y2) {
+            if (this._pointInSym(pointer.x, pointer.y, sym)) {
                 this.toggleSymbol(symKey);
                 return;
             }
@@ -237,6 +297,7 @@ const ClassifierEditor = {
     async setLabel(label) {
         const cluster = this.clusters[this.currentClusterIdx];
         if (!cluster) return;
+        this.undoMgr.snapshot({ clusters: this.clusters, symbols: this.symbols });
         await API.put(API.sessionUrl(`/classification/clusters/${cluster.id}/label`), { label });
         cluster.label = label;
         this.updateSidebar();
@@ -254,13 +315,14 @@ const ClassifierEditor = {
             App.showToast(`Cluster ID ${targetId} not found`, 'error');
             return;
         }
+        this.undoMgr.snapshot({ clusters: this.clusters, symbols: this.symbols });
         await API.post(API.sessionUrl('/classification/move'), {
             symbol_ids: [...this.selectedSymbolIds],
             target_cluster_id: target.id,
             target_label: target.label,
         });
         this.selectedSymbolIds.clear();
-        await this.load(true);
+        await this._reload(true);
         App.setStatus('Moved symbols');
     },
 
@@ -268,13 +330,14 @@ const ClassifierEditor = {
         if (this.selectedSymbolIds.size === 0) return;
         const label = prompt('Label for new cluster:');
         if (label === null) return;
+        this.undoMgr.snapshot({ clusters: this.clusters, symbols: this.symbols });
         await API.post(API.sessionUrl('/classification/move'), {
             symbol_ids: [...this.selectedSymbolIds],
             target_cluster_id: null,
             target_label: label,
         });
         this.selectedSymbolIds.clear();
-        await this.load(true);
+        await this._reload(true);
         App.setStatus('Created new cluster');
     },
 
@@ -283,11 +346,12 @@ const ClassifierEditor = {
         const count = this.selectedSymbolIds.size;
         if (!confirm(`Delete ${count} selected symbol(s)?\n\nThis will remove them from both classification and symbol detection results.`)) return;
 
+        this.undoMgr.snapshot({ clusters: this.clusters, symbols: this.symbols });
         await API.post(API.sessionUrl('/classification/delete-symbols'), {
             symbol_ids: [...this.selectedSymbolIds],
         });
         this.selectedSymbolIds.clear();
-        await this.load(true);
+        await this._reload(true);
         App.setStatus(`Deleted ${count} symbol(s)`);
     },
 
@@ -297,11 +361,12 @@ const ClassifierEditor = {
         const count = (cluster.symbol_ids || []).length;
         if (!confirm(`Discard cluster #${cluster.id} "${cluster.label || 'Unlabeled'}" (${count} symbols)?\n\nThis will remove these symbols from both classification and symbol detection results.`)) return;
 
+        this.undoMgr.snapshot({ clusters: this.clusters, symbols: this.symbols });
         await API.post(API.sessionUrl(`/classification/clusters/${cluster.id}/discard`));
         if (this.currentClusterIdx >= this.clusters.length - 1 && this.currentClusterIdx > 0) {
             this.currentClusterIdx--;
         }
-        await this.load(true);
+        await this._reload(true);
         App.setStatus(`Discarded cluster #${cluster.id}`);
     },
 
@@ -334,7 +399,7 @@ const ClassifierEditor = {
             });
 
             App.hideCenterLoading();
-            await this.load(true);
+            await this._reload(true);
             App.showToast(
                 `Auto-labeled ${result.labeled_clusters}/${result.total_clusters} clusters`,
                 result.labeled_clusters > 0 ? 'success' : 'error'
@@ -352,13 +417,132 @@ const ClassifierEditor = {
             <button class="btn" onclick="ClassifierEditor.prevCluster()">&#9664; Prev Cluster</button>
             <button class="btn" onclick="ClassifierEditor.nextCluster()">Next Cluster &#9654;</button>
             <div class="btn-sep"></div>
+            <button class="btn" onclick="ClassifierEditor.showMergeDialog()">Merge Clusters</button>
             <button class="btn primary" onclick="ClassifierEditor.autoLabel()">Auto Label</button>
             <div class="btn-sep"></div>
             <button class="btn danger" onclick="ClassifierEditor.discardCluster()">Discard Cluster</button>
             <div class="btn-sep"></div>
+            <button class="btn" onclick="ClassifierEditor.undo()">Undo</button>
+            <button class="btn" onclick="ClassifierEditor.redo()">Redo</button>
+            <div class="btn-sep"></div>
             <button class="btn" onclick="ClassifierEditor.load()">Refresh</button>
             <button class="btn" onclick="ImageViewer.fitToScreen()">Fit View</button>
         `;
+    },
+
+    showMergeDialog() {
+        if (this.clusters.length < 2) {
+            App.showToast('Need at least 2 clusters to merge', 'error');
+            return;
+        }
+
+        // Build modal with checkboxes for each cluster
+        let clusterListHtml = '';
+        for (const c of this.clusters) {
+            const count = (c.symbol_ids || []).length;
+            clusterListHtml += `
+                <label class="merge-cluster-item">
+                    <input type="checkbox" value="${c.id}" class="merge-cluster-cb">
+                    <span class="merge-cluster-label">#${c.id} — ${c.label || 'Unlabeled'} (${count} symbols)</span>
+                </label>
+            `;
+        }
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop';
+        backdrop.id = 'mergeModal';
+        backdrop.innerHTML = `
+            <div class="modal" style="max-width:450px;">
+                <h3>Merge Clusters</h3>
+                <p style="color:#888;font-size:13px;margin-bottom:12px">Select 2 or more clusters to merge into one.</p>
+                <div class="merge-cluster-list">${clusterListHtml}</div>
+                <div style="margin-top:12px">
+                    <label style="color:#888;font-size:12px">Label for merged cluster:</label>
+                    <input type="text" id="mergeLabelInput" placeholder="Leave empty to use target cluster label" style="width:100%;padding:8px 12px;background:#0f1529;border:1px solid #3a3a5c;color:#e0e0e0;border-radius:6px;font-size:14px;margin-top:4px;">
+                </div>
+                <div class="modal-actions" style="margin-top:16px">
+                    <button class="btn" onclick="ClassifierEditor.closeMergeDialog()">Cancel</button>
+                    <button class="btn primary" onclick="ClassifierEditor.executeMerge()">Merge</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(backdrop);
+    },
+
+    closeMergeDialog() {
+        const modal = document.getElementById('mergeModal');
+        if (modal) modal.remove();
+    },
+
+    async executeMerge() {
+        const checkboxes = document.querySelectorAll('.merge-cluster-cb:checked');
+        const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+        if (selectedIds.length < 2) {
+            App.showToast('Select at least 2 clusters to merge', 'error');
+            return;
+        }
+
+        const labelInput = document.getElementById('mergeLabelInput');
+        const label = labelInput ? labelInput.value.trim() : '';
+
+        // Use the first selected cluster as the target
+        const targetId = selectedIds[0];
+
+        this.closeMergeDialog();
+        this.undoMgr.snapshot({ clusters: this.clusters, symbols: this.symbols });
+
+        try {
+            const result = await API.post(API.sessionUrl('/classification/merge'), {
+                source_cluster_ids: selectedIds,
+                target_cluster_id: targetId,
+                target_label: label,
+            });
+
+            await this._reload(true);
+            App.showToast(
+                `Merged ${selectedIds.length} clusters into #${targetId} "${result.target_label}" (${result.merged_symbols} symbols)`,
+                'success'
+            );
+        } catch (e) {
+            App.showToast('Merge failed: ' + e.message, 'error');
+        }
+    },
+
+    async undo() {
+        const prev = this.undoMgr.undo({ clusters: this.clusters, symbols: this.symbols });
+        if (!prev) { App.setStatus('Nothing to undo'); return; }
+        this.clusters = prev.clusters;
+        this.symbols = prev.symbols;
+        await API.put(API.sessionUrl('/classification/bulk'), {
+            clusters: this.clusters,
+            symbols: this.symbols,
+        });
+        this.selectedSymbolIds.clear();
+        if (this.currentClusterIdx >= this.clusters.length) {
+            this.currentClusterIdx = Math.max(0, this.clusters.length - 1);
+        }
+        this.renderOverlay();
+        this.updateSidebar();
+        App.setStatus('Undo');
+    },
+
+    async redo() {
+        const next = this.undoMgr.redo({ clusters: this.clusters, symbols: this.symbols });
+        if (!next) { App.setStatus('Nothing to redo'); return; }
+        this.clusters = next.clusters;
+        this.symbols = next.symbols;
+        await API.put(API.sessionUrl('/classification/bulk'), {
+            clusters: this.clusters,
+            symbols: this.symbols,
+        });
+        this.selectedSymbolIds.clear();
+        if (this.currentClusterIdx >= this.clusters.length) {
+            this.currentClusterIdx = Math.max(0, this.clusters.length - 1);
+        }
+        this.renderOverlay();
+        this.updateSidebar();
+        App.setStatus('Redo');
     },
 
     deactivate() {
@@ -366,5 +550,6 @@ const ClassifierEditor = {
         const overlay = document.getElementById('classifierOverlay');
         if (overlay) overlay.remove();
         this._overlayObjects = [];
+        this.closeMergeDialog();
     },
 };

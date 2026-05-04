@@ -132,3 +132,17 @@ Key settings in `config.py`:
 | `DEFAULT_EMBEDDING_MODEL` | `clip` | Embedding model for classification |
 | `DEFAULT_CLUSTERING_METHOD` | `hdbscan` | Clustering algorithm |
 | `MAX_CONTENT_LENGTH` | 500 MB | Max upload file size |
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `URL_PREFIX` | `""` (empty) | URL path prefix for deploying behind a reverse proxy. Set this when hosting on a subpath (e.g. `/pnid_anno`). |
+
+**Example — deploy on HPC under `/pnid_anno`:**
+
+```bash
+URL_PREFIX=/pnid_anno python app.py
+```
+
+All routes, API endpoints, and static assets will be served under the given prefix (e.g. `http://host/pnid_anno/`, `http://host/pnid_anno/api/...`). When unset, the app runs at the root path (`/`).

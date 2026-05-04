@@ -30,7 +30,7 @@ def get_text(session_id):
 
 @text_bp.route('/session/<session_id>/text/<int:idx>', methods=['PUT'])
 def update_text(session_id, idx):
-    """Update text content for a detection."""
+    """Update text content and/or bbox for a detection."""
     session_dir = get_session_dir(session_id)
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
@@ -40,9 +40,6 @@ def update_text(session_id, idx):
         return jsonify({'error': 'No text data found'}), 404
 
     body = request.get_json()
-    new_text = body.get('text')
-    if new_text is None:
-        return jsonify({'error': 'text is required'}), 400
 
     data = load_json_file(path)
     detections = data if isinstance(data, list) else data.get('detections', [])
@@ -50,7 +47,13 @@ def update_text(session_id, idx):
     if idx < 0 or idx >= len(detections):
         return jsonify({'error': 'Index out of range'}), 404
 
-    detections[idx]['text'] = new_text
+    if 'text' in body:
+        detections[idx]['text'] = body['text']
+    if 'bbox' in body:
+        bbox = body['bbox']
+        if isinstance(bbox, list) and len(bbox) == 4:
+            detections[idx]['bbox'] = [int(v) for v in bbox]
+
     save_json_file(path, detections)
 
     return jsonify({'success': True})

@@ -7,6 +7,7 @@ const LineEditor = {
     dashed: [],
     directions: {},
     resizedShape: null,
+    undoMgr: new UndoManager(),
     // Multi-select: set of keys like "solid_0", "dashed_3"
     selectedKeys: new Set(),
     fabricLines: [],
@@ -40,22 +41,45 @@ const LineEditor = {
             this.directions = data.directions || {};
             this.resizedShape = data.resized_shape;
             this.selectedKeys.clear();
+            this.undoMgr.clear();
 
-            // Update coord scale now that we have line data
-            if (ImageViewer.imageWidth > 0) {
-                if (this.resizedShape) {
-                    App.coordScale = ImageViewer.imageWidth / this.resizedShape[1];
-                } else if (data.target_width) {
-                    App.coordScale = ImageViewer.imageWidth / data.target_width;
-                } else if (data.scale) {
-                    App.coordScale = 1.0 / data.scale;
-                }
-            }
+            this._updateCoordScale(data);
 
             this.render();
             this.updateSidebar();
         } catch (e) {
             App.setStatus('No line detection data available');
+        }
+    },
+
+    /** Reload data from server without clearing undo history */
+    async _reload() {
+        try {
+            const data = await API.get(API.sessionUrl('/lines'));
+            this.solid = data.solid || [];
+            this.dashed = data.dashed || [];
+            this.directions = data.directions || {};
+            this.resizedShape = data.resized_shape;
+            this.selectedKeys.clear();
+
+            this._updateCoordScale(data);
+
+            this.render();
+            this.updateSidebar();
+        } catch (e) {
+            App.setStatus('Error reloading lines');
+        }
+    },
+
+    _updateCoordScale(data) {
+        if (ImageViewer.imageWidth > 0) {
+            if (this.resizedShape) {
+                App.coordScale = ImageViewer.imageWidth / this.resizedShape[1];
+            } else if (data.target_width) {
+                App.coordScale = ImageViewer.imageWidth / data.target_width;
+            } else if (data.scale) {
+                App.coordScale = 1.0 / data.scale;
+            }
         }
     },
 
@@ -391,7 +415,7 @@ const LineEditor = {
         await API.post(API.sessionUrl('/lines/bulk-delete'), { items });
 
         this.selectedKeys.clear();
-        await this.load();
+        await this._reload();
         App.setStatus(`Deleted ${items.length} line(s)`);
     },
 
@@ -405,7 +429,7 @@ const LineEditor = {
         this._saveUndo();
         await API.put(API.sessionUrl(`/lines/${type}/${idx}`), { new_type: newType });
         this.selectedKeys.clear();
-        await this.load();
+        await this._reload();
         App.setStatus('Toggled line type');
     },
 
@@ -464,7 +488,7 @@ const LineEditor = {
 
             this._saveUndo();
             API.post(API.sessionUrl('/lines'), { line, type: this.drawLineType }).then(() => {
-                this.load();
+                this._reload();
                 App.setStatus('Added new line');
             });
             return true;
@@ -472,7 +496,57 @@ const LineEditor = {
     },
 
     _saveUndo() {
-        // No-op: undo/redo removed
+        this.undoMgr.snapshot({
+            solid: this.solid,
+            dashed: this.dashed,
+            directions: this.directions,
+        });
+    },
+
+    async undo() {
+        if (this.editMode) this.exitEditMode(false);
+        const prev = this.undoMgr.undo({
+            solid: this.solid,
+            dashed: this.dashed,
+            directions: this.directions,
+        });
+        if (!prev) { App.setStatus('Nothing to undo'); return; }
+        this.solid = prev.solid;
+        this.dashed = prev.dashed;
+        this.directions = prev.directions;
+        await API.put(API.sessionUrl('/lines/bulk'), {
+            solid: this.solid,
+            dashed: this.dashed,
+            directions: this.directions,
+            resized_shape: this.resizedShape,
+        });
+        this.selectedKeys.clear();
+        this.render();
+        this.updateSidebar();
+        App.setStatus('Undo');
+    },
+
+    async redo() {
+        if (this.editMode) this.exitEditMode(false);
+        const next = this.undoMgr.redo({
+            solid: this.solid,
+            dashed: this.dashed,
+            directions: this.directions,
+        });
+        if (!next) { App.setStatus('Nothing to redo'); return; }
+        this.solid = next.solid;
+        this.dashed = next.dashed;
+        this.directions = next.directions;
+        await API.put(API.sessionUrl('/lines/bulk'), {
+            solid: this.solid,
+            dashed: this.dashed,
+            directions: this.directions,
+            resized_shape: this.resizedShape,
+        });
+        this.selectedKeys.clear();
+        this.render();
+        this.updateSidebar();
+        App.setStatus('Redo');
     },
 
     getToolbar() {
@@ -499,6 +573,9 @@ const LineEditor = {
             <div class="btn-sep"></div>
             <button class="btn" onclick="LineEditor.cleanupLines()">Clean Up Lines</button>
             <div class="btn-sep"></div>
+            <button class="btn" onclick="LineEditor.undo()">Undo</button>
+            <button class="btn" onclick="LineEditor.redo()">Redo</button>
+            <div class="btn-sep"></div>
             <button class="btn" id="btnDrawLine" onclick="LineEditor.toggleDraw()">Draw Line</button>
             <select style="padding:4px 8px;background:#1a1a2e;color:#e0e0e0;border:1px solid #3a3a5c;border-radius:6px"
                     onchange="LineEditor.drawLineType=this.value">
@@ -518,7 +595,7 @@ const LineEditor = {
         App.setStatus('Cleaning up lines...');
         try {
             const result = await API.post(API.sessionUrl('/lines/cleanup'));
-            await this.load();
+            await this._reload();
             App.setStatus(`Cleanup done: ${result.before.solid + result.before.dashed} → ${result.after.solid + result.after.dashed} lines (removed ${result.removed})`);
         } catch (e) {
             App.setStatus('Cleanup failed: ' + e.message);

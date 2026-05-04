@@ -100,7 +100,7 @@ def _detect_completed_steps(session_dir):
         'digitization': False,
     }
 
-    if find_file(session_dir, '_sam2_results.json') and find_file(session_dir, '_masks.npz'):
+    if find_file(session_dir, '_sam2_results.json'):
         steps['symbol_detection'] = True
     if find_file(session_dir, '_classification.json'):
         steps['classification'] = True

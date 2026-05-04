@@ -1,7 +1,8 @@
 /**
- * Graph Viewer - Visualize digitized P&ID graph with symbol patches as nodes.
+ * Graph Viewer - Visualize and edit digitized P&ID graph with symbol patches as nodes.
  * Nodes are positioned at their original image locations (bbox centers).
  * Uses HTML5 Canvas with pan/zoom.
+ * Supports editing: delete symbols, delete connections, add connections.
  */
 const GraphViewer = {
     canvas: null,
@@ -10,6 +11,7 @@ const GraphViewer = {
     links: [],
     categories: {},   // category -> { color, count }
     patchImages: {},   // mask_id -> Image
+    undoMgr: new UndoManager(),
     width: 0,
     height: 0,
     // Bounding box of all node positions (image coords)
@@ -24,6 +26,13 @@ const GraphViewer = {
     zoom: 1,
     hoveredNode: null,
     hoveredLink: null,
+
+    // Edit mode state
+    editMode: null,          // null = view-only, 'select' = select/delete, 'addLink' = add connection
+    selectedNode: null,
+    selectedLink: null,
+    addLinkSource: null,     // first node selected when adding a link
+    _panMoved: false,        // track if mouse moved during pan (to distinguish click from drag)
 
     NODE_SIZE: 48,
 
@@ -47,6 +56,7 @@ const GraphViewer = {
 
         overlay.innerHTML = `
             <div id="graphStats" class="graph-stats-bar"></div>
+            <div id="graphEditBar" class="graph-edit-bar" style="display:none;"></div>
             <div style="flex:1;position:relative;overflow:hidden;">
                 <canvas id="graphCanvas" style="display:block;width:100%;height:100%;"></canvas>
             </div>
@@ -66,6 +76,12 @@ const GraphViewer = {
         this.ctx.scale(dpr, dpr);
 
         this.hoveredNode = null;
+        this.hoveredLink = null;
+        this.selectedNode = null;
+        this.selectedLink = null;
+        this.addLinkSource = null;
+        this.editMode = null;
+        this.undoMgr.clear();
 
         // Process graph data
         this._processData(graphData);
@@ -117,10 +133,12 @@ const GraphViewer = {
             return node;
         });
 
-        // Create link objects
+        // Create link objects — store raw source/target IDs for API calls
         this.links = rawLinks.map(l => ({
             source: nodeMap[l.source],
             target: nodeMap[l.target],
+            sourceId: l.source,
+            targetId: l.target,
             type: l.type || 'solid',
             direction: l.direction || 'none',
         })).filter(l => l.source && l.target);
@@ -223,11 +241,18 @@ const GraphViewer = {
             const sx = link.source.x, sy = link.source.y;
             const tx = link.target.x, ty = link.target.y;
             const isHovered = link === this.hoveredLink;
+            const isSelected = link === this.selectedLink;
 
             ctx.beginPath();
             ctx.moveTo(sx, sy);
             ctx.lineTo(tx, ty);
-            if (isHovered) {
+            if (isSelected) {
+                ctx.strokeStyle = '#ef5350';
+                ctx.lineWidth = 5 * invZ;
+            } else if (isHovered && this.editMode) {
+                ctx.strokeStyle = '#4fc3f7';
+                ctx.lineWidth = 4 * invZ;
+            } else if (isHovered) {
                 ctx.strokeStyle = '#4fc3f7';
                 ctx.lineWidth = 4 * invZ;
             } else {
@@ -247,6 +272,18 @@ const GraphViewer = {
             }
         }
 
+        // Draw "add link" preview line from source to cursor
+        if (this.editMode === 'addLink' && this.addLinkSource && this._lastWorldPos) {
+            ctx.beginPath();
+            ctx.moveTo(this.addLinkSource.x, this.addLinkSource.y);
+            ctx.lineTo(this._lastWorldPos.x, this._lastWorldPos.y);
+            ctx.strokeStyle = '#66bb6a';
+            ctx.lineWidth = 3 * invZ;
+            ctx.setLineDash([6 * invZ, 4 * invZ]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
         // Draw nodes
         for (const node of this.nodes) {
             const nw = node.w;
@@ -254,9 +291,25 @@ const GraphViewer = {
             const x = node.x - nw / 2;
             const y = node.y - nh / 2;
 
-            // Border (cluster color)
-            const borderW = node === this.hoveredNode ? 4 : 2.5;
-            ctx.strokeStyle = node.color;
+            const isSelected = node === this.selectedNode;
+            const isAddLinkSource = node === this.addLinkSource;
+
+            // Border (cluster color, or selection highlight)
+            let borderW, borderColor;
+            if (isSelected) {
+                borderW = 5;
+                borderColor = '#ef5350';
+            } else if (isAddLinkSource) {
+                borderW = 5;
+                borderColor = '#66bb6a';
+            } else if (node === this.hoveredNode) {
+                borderW = 4;
+                borderColor = node.color;
+            } else {
+                borderW = 2.5;
+                borderColor = node.color;
+            }
+            ctx.strokeStyle = borderColor;
             ctx.lineWidth = borderW * invZ;
             ctx.strokeRect(x - 1, y - 1, nw + 2, nh + 2);
 
@@ -292,8 +345,10 @@ const GraphViewer = {
             }
         }
 
-        // Tooltip for hovered node or link
-        if (this.hoveredNode) {
+        // Tooltip for hovered node or link (only when not in addLink mode with source selected)
+        if (this.editMode === 'addLink' && this.addLinkSource) {
+            // Show a hint near cursor
+        } else if (this.hoveredNode) {
             this._drawTooltip(ctx, this.hoveredNode);
         } else if (this.hoveredLink) {
             this._drawLinkTooltip(ctx, this.hoveredLink);
@@ -468,6 +523,7 @@ const GraphViewer = {
     _onMouseDown(e) {
         if (e.button !== 0) return;
         this.isPanning = true;
+        this._panMoved = false;
         this.panStartX = e.clientX;
         this.panStartY = e.clientY;
     },
@@ -477,10 +533,14 @@ const GraphViewer = {
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
         const { x: wx, y: wy } = this._screenToWorld(sx, sy);
+        this._lastWorldPos = { x: wx, y: wy };
 
         if (this.isPanning) {
-            this.offsetX += e.clientX - this.panStartX;
-            this.offsetY += e.clientY - this.panStartY;
+            const dx = e.clientX - this.panStartX;
+            const dy = e.clientY - this.panStartY;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) this._panMoved = true;
+            this.offsetX += dx;
+            this.offsetY += dy;
             this.panStartX = e.clientX;
             this.panStartY = e.clientY;
             this.draw();
@@ -490,14 +550,365 @@ const GraphViewer = {
             if (node !== this.hoveredNode || link !== this.hoveredLink) {
                 this.hoveredNode = node;
                 this.hoveredLink = link;
-                this.canvas.style.cursor = (node || link) ? 'pointer' : 'default';
+                if (this.editMode === 'addLink') {
+                    this.canvas.style.cursor = node ? 'crosshair' : 'crosshair';
+                } else if (this.editMode === 'select') {
+                    this.canvas.style.cursor = (node || link) ? 'pointer' : 'default';
+                } else {
+                    this.canvas.style.cursor = (node || link) ? 'pointer' : 'default';
+                }
+                this.draw();
+            }
+            // Redraw for addLink preview line even if hover didn't change
+            if (this.editMode === 'addLink' && this.addLinkSource) {
                 this.draw();
             }
         }
     },
 
-    _onMouseUp() {
+    _onMouseUp(e) {
+        const wasPanning = this.isPanning;
         this.isPanning = false;
+
+        if (wasPanning && this._panMoved) return;
+        if (e.button !== 0) return;
+
+        // This is a click (not a drag)
+        const rect = this.canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const { x: wx, y: wy } = this._screenToWorld(sx, sy);
+
+        if (this.editMode === 'select') {
+            this._handleSelectClick(wx, wy);
+        } else if (this.editMode === 'addLink') {
+            this._handleAddLinkClick(wx, wy);
+        }
+    },
+
+    _handleSelectClick(wx, wy) {
+        const node = this._nodeAt(wx, wy);
+        const link = node ? null : this._linkAt(wx, wy);
+
+        if (node) {
+            this.selectedNode = (this.selectedNode === node) ? null : node;
+            this.selectedLink = null;
+        } else if (link) {
+            this.selectedLink = (this.selectedLink === link) ? null : link;
+            this.selectedNode = null;
+        } else {
+            this.selectedNode = null;
+            this.selectedLink = null;
+        }
+        this._updateEditBar();
+        this.draw();
+    },
+
+    _handleAddLinkClick(wx, wy) {
+        const node = this._nodeAt(wx, wy);
+        if (!node) return;
+
+        if (!this.addLinkSource) {
+            // First click: select source
+            this.addLinkSource = node;
+            this._updateEditBar();
+            this.draw();
+        } else {
+            // Second click: select target and create link
+            if (node === this.addLinkSource) {
+                // Clicked same node — cancel
+                App.showToast('Cannot create self-loop. Click a different node.', 'error');
+                return;
+            }
+            this._createLink(this.addLinkSource, node);
+        }
+    },
+
+    // ---- Edit Mode Controls ----
+
+    setEditMode(mode) {
+        this.editMode = mode;
+        this.selectedNode = null;
+        this.selectedLink = null;
+        this.addLinkSource = null;
+        this._lastWorldPos = null;
+
+        // Update toolbar button states
+        document.getElementById('editorToolbar').innerHTML = this.getToolbar();
+        this._updateEditBar();
+        this.draw();
+
+        if (mode === 'addLink') {
+            this.canvas.style.cursor = 'crosshair';
+        } else {
+            this.canvas.style.cursor = 'default';
+        }
+    },
+
+    _updateEditBar() {
+        const bar = document.getElementById('graphEditBar');
+        if (!bar) return;
+
+        if (!this.editMode) {
+            bar.style.display = 'none';
+            bar.innerHTML = '';
+            return;
+        }
+
+        bar.style.display = 'flex';
+
+        if (this.editMode === 'select') {
+            if (this.selectedNode) {
+                const n = this.selectedNode;
+                const label = n.captions.length > 0 ? n.captions[0] : n.category;
+                bar.innerHTML = `
+                    <span class="graph-edit-info">Selected: <strong>#${n.id} ${label}</strong></span>
+                    <button class="btn danger" onclick="GraphViewer.deleteSelectedNode()">Delete Symbol</button>
+                    <span class="graph-edit-hint">Press Delete key or click button to remove</span>
+                `;
+            } else if (this.selectedLink) {
+                const l = this.selectedLink;
+                const srcLabel = l.source.captions.length > 0 ? l.source.captions[0] : `#${l.source.id}`;
+                const tgtLabel = l.target.captions.length > 0 ? l.target.captions[0] : `#${l.target.id}`;
+                bar.innerHTML = `
+                    <span class="graph-edit-info">Selected link: <strong>${srcLabel} → ${tgtLabel}</strong></span>
+                    <button class="btn danger" onclick="GraphViewer.deleteSelectedLink()">Delete Connection</button>
+                    <span class="graph-edit-hint">Press Delete key or click button to remove</span>
+                `;
+            } else {
+                bar.innerHTML = `
+                    <span class="graph-edit-hint">Click a symbol or connection to select it, then delete.</span>
+                `;
+            }
+        } else if (this.editMode === 'addLink') {
+            if (this.addLinkSource) {
+                const n = this.addLinkSource;
+                const label = n.captions.length > 0 ? n.captions[0] : `#${n.id} (${n.category})`;
+                bar.innerHTML = `
+                    <span class="graph-edit-info">Source: <strong>${label}</strong></span>
+                    <span class="graph-edit-hint">Now click the target symbol to create a connection. Press Esc to cancel.</span>
+                `;
+            } else {
+                bar.innerHTML = `
+                    <span class="graph-edit-hint">Click the source symbol for the new connection.</span>
+                `;
+            }
+        }
+    },
+
+    async deleteSelectedNode() {
+        if (!this.selectedNode) return;
+        const node = this.selectedNode;
+
+        this._saveUndo();
+        try {
+            await API.del(API.sessionUrl(`/graph/node/${node.id}`));
+
+            // Remove locally
+            this.links = this.links.filter(l => l.source !== node && l.target !== node);
+            this.nodes = this.nodes.filter(n => n !== node);
+
+            // Update category counts
+            if (this.categories[node.category]) {
+                this.categories[node.category].count--;
+            }
+
+            this.selectedNode = null;
+            this._updateStats();
+            this._updateEditBar();
+            this.draw();
+            App.showToast(`Deleted symbol #${node.id} (${node.category})`, 'success');
+        } catch (e) {
+            App.showToast('Failed to delete symbol: ' + e.message, 'error');
+        }
+    },
+
+    async deleteSelectedLink() {
+        if (!this.selectedLink) return;
+        const link = this.selectedLink;
+
+        this._saveUndo();
+        try {
+            const res = await fetch(API.sessionUrl('/graph/link'), {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: link.sourceId, target: link.targetId }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: res.statusText }));
+                throw new Error(err.error || res.statusText);
+            }
+        } catch (e) {
+            App.showToast('Failed to delete connection: ' + e.message, 'error');
+            return;
+        }
+
+        // Remove locally
+        this.links = this.links.filter(l => l !== link);
+        this.selectedLink = null;
+        this._updateStats();
+        this._updateEditBar();
+        this.draw();
+
+        const srcLabel = link.source.captions.length > 0 ? link.source.captions[0] : `#${link.source.id}`;
+        const tgtLabel = link.target.captions.length > 0 ? link.target.captions[0] : `#${link.target.id}`;
+        App.showToast(`Deleted connection: ${srcLabel} → ${tgtLabel}`, 'success');
+    },
+
+    async _createLink(sourceNode, targetNode) {
+        this._saveUndo();
+        try {
+            const res = await API.post(API.sessionUrl('/graph/link'), {
+                source: sourceNode.id,
+                target: targetNode.id,
+                type: 'solid',
+                direction: 'none',
+            });
+
+            // Add locally
+            this.links.push({
+                source: sourceNode,
+                target: targetNode,
+                sourceId: sourceNode.id,
+                targetId: targetNode.id,
+                type: 'solid',
+                direction: 'none',
+            });
+
+            this.addLinkSource = null;
+            this._updateStats();
+            this._updateEditBar();
+            this.draw();
+
+            const srcLabel = sourceNode.captions.length > 0 ? sourceNode.captions[0] : `#${sourceNode.id}`;
+            const tgtLabel = targetNode.captions.length > 0 ? targetNode.captions[0] : `#${targetNode.id}`;
+            App.showToast(`Added connection: ${srcLabel} → ${tgtLabel}`, 'success');
+        } catch (e) {
+            App.showToast('Failed to add connection: ' + e.message, 'error');
+        }
+    },
+
+    /** Serialize current graph state for undo snapshots (raw data, no object references) */
+    _snapshotState() {
+        return {
+            nodes: this.nodes.map(n => ({
+                id: n.id, category: n.category, mask_id: n.mask_id,
+                bbox: n.bbox, captions: [...n.captions],
+                cluster_id: n.cluster_id, color: n.color,
+                x: n.x, y: n.y, w: n.w, h: n.h,
+            })),
+            links: this.links.map(l => ({
+                sourceId: l.sourceId, targetId: l.targetId,
+                type: l.type, direction: l.direction,
+            })),
+        };
+    },
+
+    /** Restore graph state from a snapshot */
+    _restoreState(state) {
+        const nodeMap = {};
+        this.nodes = state.nodes.map(n => {
+            const node = { ...n, captions: [...n.captions] };
+            nodeMap[n.id] = node;
+            return node;
+        });
+        this.links = state.links.map(l => ({
+            source: nodeMap[l.sourceId],
+            target: nodeMap[l.targetId],
+            sourceId: l.sourceId,
+            targetId: l.targetId,
+            type: l.type,
+            direction: l.direction,
+        })).filter(l => l.source && l.target);
+
+        // Rebuild category counts
+        this.categories = {};
+        for (const n of this.nodes) {
+            if (!this.categories[n.category]) {
+                this.categories[n.category] = { color: n.color, count: 0 };
+            }
+            this.categories[n.category].count++;
+        }
+    },
+
+    _saveUndo() {
+        this.undoMgr.snapshot(this._snapshotState());
+    },
+
+    async undo() {
+        const prev = this.undoMgr.undo(this._snapshotState());
+        if (!prev) { App.showToast('Nothing to undo', 'error'); return; }
+        this._restoreState(prev);
+        await this._syncToServer();
+        this.selectedNode = null;
+        this.selectedLink = null;
+        this._updateStats();
+        this._updateEditBar();
+        this.draw();
+        App.showToast('Undo', 'success');
+    },
+
+    async redo() {
+        const next = this.undoMgr.redo(this._snapshotState());
+        if (!next) { App.showToast('Nothing to redo', 'error'); return; }
+        this._restoreState(next);
+        await this._syncToServer();
+        this.selectedNode = null;
+        this.selectedLink = null;
+        this._updateStats();
+        this._updateEditBar();
+        this.draw();
+        App.showToast('Redo', 'success');
+    },
+
+    async _syncToServer() {
+        // Build raw nodes/links for the bulk API
+        const rawNodes = this.nodes.map(n => ({
+            id: n.id, category: n.category, mask_id: n.mask_id,
+            bbox: n.bbox, captions: n.captions, cluster_id: n.cluster_id,
+        }));
+        const rawLinks = this.links.map(l => ({
+            source: l.sourceId, target: l.targetId,
+            type: l.type, direction: l.direction,
+        }));
+        await API.put(API.sessionUrl('/graph/bulk'), { nodes: rawNodes, links: rawLinks });
+    },
+
+    handleKeyDown(e) {
+        // Undo/redo works regardless of edit mode
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'z') { this.undo(); return true; }
+            if (e.key === 'y') { this.redo(); return true; }
+        }
+
+        if (!this.editMode) return false;
+
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (this.editMode === 'select') {
+                if (this.selectedNode) {
+                    this.deleteSelectedNode();
+                    return true;
+                }
+                if (this.selectedLink) {
+                    this.deleteSelectedLink();
+                    return true;
+                }
+            }
+        }
+
+        if (e.key === 'Escape') {
+            if (this.editMode === 'addLink' && this.addLinkSource) {
+                this.addLinkSource = null;
+                this._updateEditBar();
+                this.draw();
+                return true;
+            }
+            // Exit edit mode
+            this.setEditMode(null);
+            return true;
+        }
+
+        return false;
     },
 
     _onWheel(e) {
@@ -518,8 +929,22 @@ const GraphViewer = {
     },
 
     getToolbar() {
+        const isSelect = this.editMode === 'select';
+        const isAddLink = this.editMode === 'addLink';
+        const inEdit = isSelect || isAddLink;
+
         return `
             <button class="btn" onclick="GraphViewer.fitToScreen()">Fit View</button>
+            <div class="btn-sep"></div>
+            <button class="btn ${isSelect ? 'active' : ''}" onclick="GraphViewer.setEditMode(${isSelect ? 'null' : "'select'"})">
+                ${isSelect ? 'Exit Select' : 'Select / Delete'}
+            </button>
+            <button class="btn ${isAddLink ? 'active' : ''}" onclick="GraphViewer.setEditMode(${isAddLink ? 'null' : "'addLink'"})">
+                ${isAddLink ? 'Exit Add Link' : 'Add Connection'}
+            </button>
+            <div class="btn-sep"></div>
+            <button class="btn" onclick="GraphViewer.undo()">Undo</button>
+            <button class="btn" onclick="GraphViewer.redo()">Redo</button>
             <div class="btn-sep"></div>
             <button class="btn primary" onclick="App.exportZip()">Export ZIP</button>
             <button class="btn" onclick="App.runDigitize()" style="margin-left:4px">Re-generate Graph</button>
@@ -530,5 +955,9 @@ const GraphViewer = {
         this.nodes = [];
         this.links = [];
         this.patchImages = {};
+        this.editMode = null;
+        this.selectedNode = null;
+        this.selectedLink = null;
+        this.addLinkSource = null;
     },
 };

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>P&ID Workspace</title>
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/pnid_anno/static/css/main.css">
 </head>
 <body>
     <div class="workspace">
@@ -15,7 +15,7 @@
             <div class="actions">
                 <button class="btn" id="btnSaveAll" onclick="App.saveAll()">Save All</button>
                 <button class="btn primary" id="btnExport" onclick="App.exportZip()">Export ZIP</button>
-                <a href="/" class="btn">New Session</a>
+                <a href="/pnid_anno" class="btn">New Session</a>
             </div>
         </div>
 
@@ -64,15 +64,15 @@
     </div>
 
     <script>const SESSION_ID = "{{ session_id }}";</script>
-    <script src="/static/lib/fabric.min.js"></script>
-    <script src="/static/js/api.js"></script>
-    <script src="/static/js/undoManager.js"></script>
-    <script src="/static/js/imageViewer.js"></script>
-    <script src="/static/js/maskEditor.js"></script>
-    <script src="/static/js/classifierEditor.js"></script>
-    <script src="/static/js/textEditor.js"></script>
-    <script src="/static/js/lineEditor.js"></script>
-    <script src="/static/js/graphViewer.js"></script>
-    <script src="/static/js/app.js"></script>
+    <script src="/pnid_anno/static/lib/fabric.min.js"></script>
+    <script src="/pnid_anno/static/js/api.js"></script>
+    <script src="/pnid_anno/static/js/undoManager.js"></script>
+    <script src="/pnid_anno/static/js/imageViewer.js"></script>
+    <script src="/pnid_anno/static/js/maskEditor.js"></script>
+    <script src="/pnid_anno/static/js/classifierEditor.js"></script>
+    <script src="/pnid_anno/static/js/textEditor.js"></script>
+    <script src="/pnid_anno/static/js/lineEditor.js"></script>
+    <script src="/pnid_anno/static/js/graphViewer.js"></script>
+    <script src="/pnid_anno/static/js/app.js"></script>
 </body>
 </html>

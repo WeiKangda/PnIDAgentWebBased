@@ -11,9 +11,13 @@ if PNIDAGENT_DIR not in sys.path:
 from flask import Flask
 
 def create_app():
-    app = Flask(__name__)
+    #app = Flask(__name__)
+    app = Flask(__name__, static_url_path='/pnid_anno/static')
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
     app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
     app.config['SECRET_KEY'] = 'pnid-web-tool-dev-key'
+    app.config['APPLICATION_ROOT'] = '/pid_anno'
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -27,23 +31,24 @@ def create_app():
     from api.image import image_bp
     from api.export import export_bp
 
-    app.register_blueprint(upload_bp, url_prefix='/api')
-    app.register_blueprint(pipeline_bp, url_prefix='/api')
-    app.register_blueprint(masks_bp, url_prefix='/api')
-    app.register_blueprint(classification_bp, url_prefix='/api')
-    app.register_blueprint(text_bp, url_prefix='/api')
-    app.register_blueprint(lines_bp, url_prefix='/api')
-    app.register_blueprint(image_bp, url_prefix='/api')
-    app.register_blueprint(export_bp, url_prefix='/api')
+    prefix = '/pnid_anno/api/'
+    app.register_blueprint(upload_bp, url_prefix=prefix)
+    app.register_blueprint(pipeline_bp, url_prefix=prefix)
+    app.register_blueprint(masks_bp, url_prefix=prefix)
+    app.register_blueprint(classification_bp, url_prefix=prefix)
+    app.register_blueprint(text_bp, url_prefix=prefix)
+    app.register_blueprint(lines_bp, url_prefix=prefix)
+    app.register_blueprint(image_bp, url_prefix=prefix)
+    app.register_blueprint(export_bp, url_prefix=prefix)
 
     # Page routes
     from flask import render_template, redirect, url_for
 
-    @app.route('/')
+    @app.route('/pnid_anno/', strict_slashes=False)
     def index():
         return render_template('index.html')
 
-    @app.route('/workspace/<session_id>')
+    @app.route('/pnid_anno/workspace/<session_id>')
     def workspace(session_id):
         session_dir = os.path.join(UPLOAD_DIR, session_id)
         if not os.path.isdir(session_dir):

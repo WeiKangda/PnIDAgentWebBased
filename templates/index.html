@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>P&ID Annotation Tool</title>
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/pnid_anno/static/css/main.css">
 </head>
 <body>
     <div class="landing">
@@ -68,16 +68,16 @@
                 zone.classList.remove('dragover');
                 const file = e.dataTransfer.files[0];
                 if (!file) return;
-                if (zone === imageZone) uploadFile(file, '/api/upload/image');
-                else uploadFile(file, '/api/upload/results');
+                if (zone === imageZone) uploadFile(file, '/pnid_anno/api/upload/image');
+                else uploadFile(file, '/pnid_anno/api/upload/results');
             });
         });
 
         imageInput.addEventListener('change', e => {
-            if (e.target.files[0]) uploadFile(e.target.files[0], '/api/upload/image');
+            if (e.target.files[0]) uploadFile(e.target.files[0], '/pnid_anno/api/upload/image');
         });
         zipInput.addEventListener('change', e => {
-            if (e.target.files[0]) uploadFile(e.target.files[0], '/api/upload/results');
+            if (e.target.files[0]) uploadFile(e.target.files[0], '/pnid_anno/api/upload/results');
         });
 
         async function uploadFile(file, endpoint) {
@@ -111,7 +111,7 @@
                         } else {
                             progressMsg.textContent = 'Upload complete! Redirecting...';
                             progressBar.style.width = '100%';
-                            window.location.href = '/workspace/' + data.session_id;
+                            window.location.href = '/pnid_anno/workspace/' + data.session_id;
                         }
                     } else {
                         const err = JSON.parse(xhr.responseText);
@@ -159,7 +159,7 @@
             progressBar.style.width = '50%';
 
             try {
-                const resp = await fetch('/api/upload/pdf-select', {
+                const resp = await fetch('/pnid_anno/api/upload/pdf-select', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session_id: sessionId, page: pageNum }),
@@ -168,7 +168,7 @@
                 if (resp.ok) {
                     progressMsg.textContent = 'Page converted! Redirecting...';
                     progressBar.style.width = '100%';
-                    window.location.href = '/workspace/' + data.session_id;
+                    window.location.href = '/pnid_anno/workspace/' + data.session_id;
                 } else {
                     progressMsg.textContent = 'Error: ' + (data.error || 'Conversion failed');
                 }

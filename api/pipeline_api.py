@@ -10,6 +10,7 @@ from config import (
     UPLOAD_DIR, PNIDAGENT_DIR,
     YOLO_MODEL_PATH, SAM2_MODEL_PATH, SAM2_BASE_MODEL,
     DEFAULT_DETECTOR, DEFAULT_CONFIDENCE, DEFAULT_DEVICE,
+    YOLO_IMGSZ, YOLO_TTA,
     DEFAULT_EMBEDDING_MODEL, DEFAULT_CLUSTERING_METHOD, DEFAULT_SENSITIVITY,
     DEFAULT_TARGET_WIDTH, DEFAULT_NMS_IOU, DEFAULT_MIN_LINE_LEN,
     DEFAULT_MAX_TEXT_DISTANCE, DEFAULT_MAX_LINE_DISTANCE,
@@ -100,7 +101,8 @@ def run_detection(session_id):
                 yolo_detector = YOLOSymbolDetector(model_path=YOLO_MODEL_PATH)
 
                 _update_task(task_id, progress='Running detection...')
-                detections = yolo_detector.detect(image, conf_threshold=confidence)
+                detections = yolo_detector.detect(image, conf_threshold=confidence,
+                                                   imgsz=YOLO_IMGSZ, augment=YOLO_TTA)
 
                 masks = []
                 scores = []

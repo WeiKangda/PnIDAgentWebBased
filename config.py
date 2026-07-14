@@ -14,9 +14,16 @@ YOLO_MODEL_PATH = os.path.join(PNIDAGENT_DIR, 'best.pt')
 SAM2_MODEL_PATH = os.path.join(PNIDAGENT_DIR, 'best_model.pth')
 SAM2_BASE_MODEL = 'facebook/sam2-hiera-base-plus'
 
+# YOLO inference settings (single model — no ensemble)
+# imgsz: high-res P&IDs need ~1280 (default 640 collapses on small symbols).
+# TTA: augment=True gives ~+0.03-0.05 F1 but is 2-3x slower. Single model either way.
+YOLO_IMGSZ = int(os.environ.get('YOLO_IMGSZ', 1280))
+YOLO_TTA = os.environ.get('YOLO_TTA', '0') == '1'
+
 # Pipeline defaults
 DEFAULT_DETECTOR = 'yolo'
-DEFAULT_CONFIDENCE = 0.5
+# Lower conf for pre-labeling: favour recall (catch more, human deletes extras).
+DEFAULT_CONFIDENCE = 0.50
 DEFAULT_EMBEDDING_MODEL = 'clip'
 DEFAULT_CLUSTERING_METHOD = 'hdbscan'
 DEFAULT_SENSITIVITY = 'high'

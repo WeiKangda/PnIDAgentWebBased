@@ -44,25 +44,28 @@ git submodule update --init --recursive
 
 ### 2. Download model weights
 
-Download the following model files from Box and place them in the `PnIDAgent/` directory:
+All model files go in the `PnIDAgent/` directory. The two detectors are published
+as GitHub release assets:
 
-| File | Description | Destination |
-|------|-------------|-------------|
-| `best.pt` | Fine-tuned YOLO symbol detector | `PnIDAgent/best.pt` |
-| `best_model.pth` | Fine-tuned SAM2 segmentation model | `PnIDAgent/best_model.pth` |
-| `line_seg_best.pt` | U-Net pipe-centreline segmenter (optional) | `PnIDAgent/line_seg_best.pt` |
+```bash
+curl -L -o PnIDAgent/best.pt \
+  https://github.com/WeiKangda/PnIDAgent/releases/download/yolo-model-v1/best.pt
+curl -L -o PnIDAgent/line_seg_best.pt \
+  https://github.com/WeiKangda/PnIDAgent/releases/download/lineseg-model-v1/line_seg_best.pt
+```
 
-> **Box download link:** https://inlbox.box.com/s/lpd4mfxshhb8okjccbnkrevvq6mkl9ic
+| File | Description | Source |
+|------|-------------|--------|
+| `best.pt` | YOLO symbol detector, macro F1 0.888 on four real nuclear drawings | [`yolo-model-v1`](https://github.com/WeiKangda/PnIDAgent/releases/tag/yolo-model-v1) |
+| `line_seg_best.pt` | U-Net pipe-centreline segmenter (optional) | [`lineseg-model-v1`](https://github.com/WeiKangda/PnIDAgent/releases/tag/lineseg-model-v1) |
+| `best_model.pth` | Fine-tuned SAM2 segmentation model (optional) | Box, link below |
+
+> **Box download link (SAM2):** https://inlbox.box.com/s/lpd4mfxshhb8okjccbnkrevvq6mkl9ic
 
 `line_seg_best.pt` is only needed for the `unet` line source. Without it the Line
 Detection step uses the classical Hough path, so the app still runs end to end.
-Put it elsewhere by setting `LINE_SEG_MODEL_PATH`. It is published as a GitHub
-release asset rather than on Box:
-
-```bash
-curl -L -o PnIDAgent/line_seg_best.pt \
-  https://github.com/WeiKangda/PnIDAgent/releases/download/models-v2/line_seg_best.pt
-```
+Put it elsewhere by setting `LINE_SEG_MODEL_PATH`. `best_model.pth` is only needed
+if you select the SAM2 detector instead of YOLO.
 
 ### 3. Create environment with uv
 

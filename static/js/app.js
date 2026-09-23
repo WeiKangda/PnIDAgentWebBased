@@ -346,8 +346,8 @@ const App = {
                         <div class="step-status">${steps.text_detection ? 'Complete' : 'Pending'}</div>
                         <select id="lineSourceSelect" class="btn" title="Pipe extractor"
                                 ${steps.text_detection ? 'disabled' : ''}>
-                            <option value="classical">Lines: classical</option>
                             <option value="unet">Lines: U-Net</option>
+                            <option value="classical">Lines: classical</option>
                         </select>
                         <button class="btn primary" onclick="App.runTextLines()" ${steps.text_detection ? 'disabled' : ''}>
                             ${steps.text_detection ? 'Done' : 'Run'}
@@ -443,7 +443,7 @@ const App = {
         step.querySelector('button').disabled = true;
 
         const sel = document.getElementById('lineSourceSelect');
-        const lineSource = sel ? sel.value : 'classical';
+        const lineSource = sel ? sel.value : 'unet';
 
         try {
             const { task_id } = await API.post(API.sessionUrl('/run/text-lines'),

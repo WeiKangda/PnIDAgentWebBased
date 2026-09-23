@@ -14,7 +14,7 @@ from config import (
     DEFAULT_EMBEDDING_MODEL, DEFAULT_CLUSTERING_METHOD, DEFAULT_SENSITIVITY,
     DEFAULT_TARGET_WIDTH, DEFAULT_NMS_IOU, DEFAULT_MIN_LINE_LEN,
     DEFAULT_MAX_TEXT_DISTANCE, DEFAULT_MAX_LINE_DISTANCE,
-    DEFAULT_LINE_SOURCE, DEFAULT_UNET_TILE, DEFAULT_UNET_MIN_LINE_LEN,
+    DEFAULT_LINE_SOURCE,
     DEFAULT_ASSEMBLER, DEFAULT_SNAP_TOL, DEFAULT_SYMBOL_PAD,
 )
 from api.session_utils import (
@@ -179,7 +179,8 @@ def run_text_lines(session_id):
     body = request.get_json() or {}
     target_width = body.get('target_width', DEFAULT_TARGET_WIDTH)
     line_source = body.get('line_source', DEFAULT_LINE_SOURCE)
-    device = body.get('device', DEFAULT_DEVICE)
+    if line_source not in ('unet', 'classical'):
+        return jsonify({'error': f'Unknown line_source: {line_source}'}), 400
 
     task_id = str(uuid.uuid4())[:12]
     tasks[task_id] = {'status': 'running', 'step': 'text_lines', 'progress': 'Starting...'}
@@ -205,7 +206,15 @@ def run_text_lines(session_id):
                 '--lang', 'en',
                 '--nms-iou', str(DEFAULT_NMS_IOU),
                 '--suppress-text',
+                '--line-method', line_source,
             ]
+            # The U-Net needs torch, which the OCR environment may not have. This
+            # interpreter does, so name it as the one to run the U-Net in; the
+            # pipeline only uses it if importing torch in-process fails.
+            if OCR_PYTHON:
+                cmd += ['--line-python', sys.executable]
+            if LINE_SEG_MODEL_PATH and os.path.exists(LINE_SEG_MODEL_PATH):
+                cmd += ['--line-ckpt', LINE_SEG_MODEL_PATH]
 
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
@@ -214,34 +223,14 @@ def run_text_lines(session_id):
                             error=f'Process failed: {result.stderr[-500:]}')
                 return
 
-            # Optionally replace the classical line geometry with the U-Net's. The
-            # classical result is kept alongside so the two can be compared, and a
-            # missing checkpoint or torch degrades to classical rather than failing
-            # the whole text+line step.
-            used_source = 'classical'
-            unet_note = None
-            if line_source == 'unet':
-                try:
-                    from pipeline import unet_lines
-                    unet_data = unet_lines.detect_lines(
-                        image_path, LINE_SEG_MODEL_PATH, device=device,
-                        tile=DEFAULT_UNET_TILE,
-                        min_len=DEFAULT_UNET_MIN_LINE_LEN,
-                        target_width=target_width,
-                        progress=lambda m: _update_task(task_id, progress=m),
-                    )
-                    if os.path.exists(lines_json):
-                        classical = load_json_file(lines_json)
-                        save_json_file(
-                            os.path.join(session_dir,
-                                         f'{img_name}_step4_lines_classical.json'),
-                            classical)
-                        # keep what only the classical stage knows
-                        unet_data.setdefault('notes_xmin', classical.get('notes_xmin'))
-                    save_json_file(lines_json, unet_data)
-                    used_source = 'unet'
-                except Exception as e:
-                    unet_note = f'U-Net unavailable, kept classical lines: {e}'
+            # The pipeline falls back to the classical stage on its own if torch or
+            # the checkpoint is missing, and records what actually ran. Surface that
+            # rather than assuming the requested method is the one we got.
+            used_source = (load_json_file(lines_json) or {}).get('method') or line_source
+            warning = None
+            if line_source == 'unet' and not used_source.startswith('unet'):
+                warning = (f'U-Net unavailable, fell back to {used_source} lines. '
+                           f'Check that torch is installed and {LINE_SEG_MODEL_PATH} exists.')
 
             meta = load_session_meta(session_id)
             if meta:
@@ -251,7 +240,7 @@ def run_text_lines(session_id):
                 save_session_meta(session_id, meta)
 
             _update_task(task_id, status='complete', progress='Done',
-                         line_source=used_source, warning=unet_note)
+                         line_source=used_source, warning=warning)
 
         except Exception as e:
             _update_task(task_id, status='error', error=str(e),

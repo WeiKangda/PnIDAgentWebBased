@@ -137,15 +137,16 @@ labels every detection `symbol`, which is enough to build the connectivity graph
 
 The dropdown next to the Text & Line Detection button selects the extractor:
 
-| Source | Needs | Notes |
+| Source | Needs | Segment F1 on the 50-sheet synthetic split |
 |--------|-------|-------|
-| `classical` | nothing extra | Hough transform plus collinear merging |
-| `unet` | `torch` + `line_seg_best.pt` | Better recall on dashed and broken pipe runs |
+| `unet` (default) | `torch` + `line_seg_best.pt` | 0.995 |
+| `classical` | nothing extra | 0.931 |
 
-Picking `unet` when the checkpoint or `torch` is missing falls back to the
-classical result and shows a warning rather than failing the step. The classical
-geometry is always kept alongside as `*_step4_lines_classical.json`, so the two
-can be compared on the same sheet.
+The choice is passed through to `process_text_lines.py --line-method`, so the web
+tool and the command line behave identically. If `torch` or the checkpoint is
+missing the pipeline falls back to the classical stage on its own rather than
+failing the step, records which one ran in the output's `method` field, and the
+UI shows a warning so a fallback is not mistaken for a U-Net result.
 
 ### Junctions in the graph view
 
@@ -174,8 +175,7 @@ PnIDAgentWebBased/
 │   ├── image.py            # Image serving
 │   └── session_utils.py    # Shared session helpers
 ├── pipeline/               # Pipeline integration wrappers
-│   ├── runner.py           # Step orchestration helpers
-│   └── unet_lines.py       # Single-image wrapper for the U-Net line segmenter
+│   └── runner.py           # Step orchestration helpers
 ├── templates/              # HTML templates (index, workspace)
 ├── static/                 # Frontend assets (JS, CSS, Fabric.js)
 ├── symbols/                # Reference symbol libraries (Surry, NorthANA)
@@ -193,9 +193,7 @@ Key settings in `config.py`:
 | `DEFAULT_DEVICE` | `cuda` | PyTorch device (`cuda` or `cpu`) |
 | `DEFAULT_EMBEDDING_MODEL` | `clip` | Embedding model for classification |
 | `DEFAULT_CLUSTERING_METHOD` | `hdbscan` | Clustering algorithm |
-| `DEFAULT_LINE_SOURCE` | `classical` | Line extractor (`classical` or `unet`) |
-| `DEFAULT_UNET_TILE` | 1024 | U-Net inference tile size (px) |
-| `DEFAULT_UNET_MIN_LINE_LEN` | 100 | Shortest segment kept from the U-Net mask (px) |
+| `DEFAULT_LINE_SOURCE` | `unet` | Line extractor (`unet` or `classical`) |
 | `DEFAULT_ASSEMBLER` | `topology` | Graph assembler (`topology` or `chains`) |
 | `DEFAULT_SNAP_TOL` | 12 | Endpoint snapping radius (px) |
 | `DEFAULT_SYMBOL_PAD` | 6 | How far outside its box a symbol claims a dead end (px) |
@@ -206,9 +204,9 @@ Key settings in `config.py`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `URL_PREFIX` | `""` (empty) | URL path prefix for deploying behind a reverse proxy. Set this when hosting on a subpath (e.g. `/pnid_anno`). |
-| `LINE_SEG_MODEL_PATH` | `PnIDAgent/line_seg_best.pt` | U-Net pipe-centreline checkpoint. |
+| `LINE_SEG_MODEL_PATH` | `PnIDAgent/line_seg_best.pt` | U-Net pipe-centreline checkpoint. Passed as `--line-ckpt`; if absent, PnIDAgent's own default is used. |
 | `OCR_PYTHON` | `""` (same interpreter) | Interpreter for the text and line subprocess, when PaddleOCR needs its own environment. |
-| `DEFAULT_LINE_SOURCE` | `classical` | Preselected line extractor in the UI. |
+| `DEFAULT_LINE_SOURCE` | `unet` | Preselected line extractor in the UI. |
 
 **Example — deploy on HPC under `/pnid_anno`:**
 

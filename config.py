@@ -14,9 +14,10 @@ YOLO_MODEL_PATH = os.path.join(PNIDAGENT_DIR, 'best.pt')
 SAM2_MODEL_PATH = os.path.join(PNIDAGENT_DIR, 'best_model.pth')
 SAM2_BASE_MODEL = 'facebook/sam2-hiera-base-plus'
 
-# U-Net pipe-centreline extractor (eval_tools/line_seg.py). Optional: needs torch
-# and a checkpoint. Trained on 450 synthetic sheets; F1 0.986 on the 50-sheet
-# synthetic validation split vs 0.931 for the tuned classical path.
+# U-Net pipe-centreline extractor. Optional: needs torch and a checkpoint.
+# Trained on 450 synthetic sheets; F1 0.995 on the 50-sheet synthetic validation
+# split vs 0.931 for the tuned classical path. Empty means let PnIDAgent use its
+# own default, weights/lineseg_unet_450.pt.
 LINE_SEG_MODEL_PATH = os.environ.get(
     'LINE_SEG_MODEL_PATH', os.path.join(PNIDAGENT_DIR, 'line_seg_best.pt'))
 
@@ -38,11 +39,11 @@ DEFAULT_MIN_LINE_LEN = 22
 DEFAULT_MAX_TEXT_DISTANCE = 200.0
 DEFAULT_MAX_LINE_DISTANCE = 300.0
 
-# Line extractor: 'classical' (Hough, no extra dependencies) or 'unet' (needs
-# torch + LINE_SEG_MODEL_PATH). 'unet' falls back to 'classical' if unavailable.
-DEFAULT_LINE_SOURCE = os.environ.get('DEFAULT_LINE_SOURCE', 'classical')
-DEFAULT_UNET_TILE = 1024
-DEFAULT_UNET_MIN_LINE_LEN = 100
+# Line extractor: 'unet' (needs torch + a checkpoint) or 'classical' (Hough, no
+# extra dependencies). Passed straight through to process_text_lines.py as
+# --line-method, which falls back to classical on its own and reports which one
+# ran in the output's `method` field. Tiling and minimum length live there too.
+DEFAULT_LINE_SOURCE = os.environ.get('DEFAULT_LINE_SOURCE', 'unet')
 
 # Graph assembly: 'topology' builds a pipe graph with junction nodes;
 # 'chains' is the legacy endpoint-chaining assembler. On synthetic sheets with

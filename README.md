@@ -56,7 +56,13 @@ Download the following model files from Box and place them in the `PnIDAgent/` d
 
 `line_seg_best.pt` is only needed for the `unet` line source. Without it the Line
 Detection step uses the classical Hough path, so the app still runs end to end.
-Put it elsewhere by setting `LINE_SEG_MODEL_PATH`.
+Put it elsewhere by setting `LINE_SEG_MODEL_PATH`. It is published as a GitHub
+release asset rather than on Box:
+
+```bash
+curl -L -o PnIDAgent/line_seg_best.pt \
+  https://github.com/WeiKangda/PnIDAgent/releases/download/models-v2/line_seg_best.pt
+```
 
 ### 3. Create environment with uv
 

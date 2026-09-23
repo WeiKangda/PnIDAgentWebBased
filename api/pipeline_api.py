@@ -9,10 +9,13 @@ from flask import Blueprint, request, jsonify
 from config import (
     UPLOAD_DIR, PNIDAGENT_DIR,
     YOLO_MODEL_PATH, SAM2_MODEL_PATH, SAM2_BASE_MODEL,
+    LINE_SEG_MODEL_PATH, OCR_PYTHON,
     DEFAULT_DETECTOR, DEFAULT_CONFIDENCE, DEFAULT_DEVICE,
     DEFAULT_EMBEDDING_MODEL, DEFAULT_CLUSTERING_METHOD, DEFAULT_SENSITIVITY,
     DEFAULT_TARGET_WIDTH, DEFAULT_NMS_IOU, DEFAULT_MIN_LINE_LEN,
     DEFAULT_MAX_TEXT_DISTANCE, DEFAULT_MAX_LINE_DISTANCE,
+    DEFAULT_LINE_SOURCE, DEFAULT_UNET_TILE, DEFAULT_UNET_MIN_LINE_LEN,
+    DEFAULT_ASSEMBLER, DEFAULT_SNAP_TOL, DEFAULT_SYMBOL_PAD,
 )
 from api.session_utils import (
     get_session_dir, get_image_path, find_file, load_json_file,
@@ -175,18 +178,26 @@ def run_text_lines(session_id):
 
     body = request.get_json() or {}
     target_width = body.get('target_width', DEFAULT_TARGET_WIDTH)
+    line_source = body.get('line_source', DEFAULT_LINE_SOURCE)
+    device = body.get('device', DEFAULT_DEVICE)
 
     task_id = str(uuid.uuid4())[:12]
     tasks[task_id] = {'status': 'running', 'step': 'text_lines', 'progress': 'Starting...'}
 
     def run():
         try:
+            from pathlib import Path
+            img_name = Path(image_path).stem
+            lines_json = os.path.join(session_dir, f'{img_name}_step4_lines.json')
+
             _update_task(task_id, progress='Running text and line detection...')
 
-            # Use subprocess to call process_text_lines.py
+            # Use subprocess to call process_text_lines.py. PaddleOCR needs its own
+            # environment (it pins opencv 4.6, and paddlepaddle-gpu downgrades the
+            # nccl/cudnn torch needs), so allow a separate interpreter.
             import subprocess
             cmd = [
-                sys.executable,
+                OCR_PYTHON or sys.executable,
                 os.path.join(PNIDAGENT_DIR, 'process_text_lines.py'),
                 '--image', image_path,
                 '--out', session_dir,
@@ -203,13 +214,44 @@ def run_text_lines(session_id):
                             error=f'Process failed: {result.stderr[-500:]}')
                 return
 
+            # Optionally replace the classical line geometry with the U-Net's. The
+            # classical result is kept alongside so the two can be compared, and a
+            # missing checkpoint or torch degrades to classical rather than failing
+            # the whole text+line step.
+            used_source = 'classical'
+            unet_note = None
+            if line_source == 'unet':
+                try:
+                    from pipeline import unet_lines
+                    unet_data = unet_lines.detect_lines(
+                        image_path, LINE_SEG_MODEL_PATH, device=device,
+                        tile=DEFAULT_UNET_TILE,
+                        min_len=DEFAULT_UNET_MIN_LINE_LEN,
+                        target_width=target_width,
+                        progress=lambda m: _update_task(task_id, progress=m),
+                    )
+                    if os.path.exists(lines_json):
+                        classical = load_json_file(lines_json)
+                        save_json_file(
+                            os.path.join(session_dir,
+                                         f'{img_name}_step4_lines_classical.json'),
+                            classical)
+                        # keep what only the classical stage knows
+                        unet_data.setdefault('notes_xmin', classical.get('notes_xmin'))
+                    save_json_file(lines_json, unet_data)
+                    used_source = 'unet'
+                except Exception as e:
+                    unet_note = f'U-Net unavailable, kept classical lines: {e}'
+
             meta = load_session_meta(session_id)
             if meta:
                 meta['steps_complete']['text_detection'] = True
                 meta['steps_complete']['line_detection'] = True
+                meta['line_source'] = used_source
                 save_session_meta(session_id, meta)
 
-            _update_task(task_id, status='complete', progress='Done')
+            _update_task(task_id, status='complete', progress='Done',
+                         line_source=used_source, warning=unet_note)
 
         except Exception as e:
             _update_task(task_id, status='error', error=str(e),
@@ -355,11 +397,42 @@ def run_digitize(session_id):
     body = request.get_json() or {}
     max_text_distance = body.get('max_text_distance', DEFAULT_MAX_TEXT_DISTANCE)
     max_line_distance = body.get('max_line_distance', DEFAULT_MAX_LINE_DISTANCE)
+    assembler = body.get('assembler', DEFAULT_ASSEMBLER)
+    snap_tol = body.get('snap_tol', DEFAULT_SNAP_TOL)
+    symbol_pad = body.get('symbol_pad', DEFAULT_SYMBOL_PAD)
 
     classification_path = find_file(session_dir, '_classification.json')
     text_path = find_file(session_dir, '_step3_text.json')
     lines_path = find_file(session_dir, '_step4_lines.json')
     sam2_path = find_file(session_dir, '_sam2_results.json')
+
+    if not lines_path or not text_path:
+        return jsonify({'error': 'Run text and line detection first'}), 400
+    if not classification_path and not sam2_path:
+        return jsonify({'error': 'Run symbol detection first'}), 400
+
+    from pathlib import Path
+    img_stem = Path(get_image_path(session_dir) or '').stem or 'result'
+
+    # Classification is produced by the interactive classifier, so a user who goes
+    # straight from detection to digitization has none. Synthesize one from the
+    # detector boxes instead of refusing: symbol boxes are in original-image
+    # pixels while text and lines are in the resized space, so scale by the factor
+    # the line stage recorded rather than letting digitize_pnid guess it from
+    # coordinate magnitudes.
+    if not classification_path:
+        det = load_json_file(sam2_path) or {}
+        scale = float((load_json_file(lines_path) or {}).get('scale') or 1.0)
+        syms = [{'id': m['id'], 'mask_id': m['id'],
+                 'bbox': [int(round(v * scale)) for v in m['bbox']],
+                 'bbox_scaled': scale != 1.0,
+                 'category': 'symbol', 'confidence': m.get('score')}
+                for m in det.get('masks_info', []) if m.get('bbox')]
+        classification_path = os.path.join(session_dir, f'{img_stem}_classification.json')
+        save_json_file(classification_path,
+                       {'symbols': syms, 'source': 'detector', 'scale': scale})
+        # results_json boxes are unscaled, so do not let them override the scaled ones
+        sam2_path = None
 
     try:
         from digitize_pnid import digitize_pnid as digitize_func
@@ -371,10 +444,10 @@ def run_digitize(session_id):
             sam2_path=sam2_path,
             max_text_distance=max_text_distance,
             max_line_distance=max_line_distance,
+            assembler=assembler,
+            snap_tol=snap_tol,
+            symbol_pad=symbol_pad,
         )
-
-        from pathlib import Path
-        img_stem = Path(get_image_path(session_dir) or '').stem or 'result'
 
         full_path = os.path.join(session_dir, f'{img_stem}_digitized.json')
         llm_path = os.path.join(session_dir, f'{img_stem}_digitized_llm.json')
@@ -387,10 +460,14 @@ def run_digitize(session_id):
             meta['steps_complete']['digitization'] = True
             save_session_meta(session_id, meta)
 
+        nodes = full_json.get('nodes', [])
         return jsonify({
             'success': True,
-            'nodes': len(full_json.get('nodes', [])),
+            'nodes': len(nodes),
             'links': len(full_json.get('links', [])),
+            'junctions': sum(1 for n in nodes if n.get('category') == 'junction'),
+            'symbols': sum(1 for n in nodes if n.get('category') != 'junction'),
+            'assembler': assembler,
         })
 
     except Exception as e:

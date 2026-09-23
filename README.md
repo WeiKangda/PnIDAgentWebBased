@@ -8,7 +8,8 @@ A web-based annotation and digitization tool for Piping & Instrumentation Diagra
 - **Symbol Detection** via YOLO + SAM2 segmentation
 - **Symbol Classification** using CLIP/DINOv2 embeddings + HDBSCAN clustering
 - **Text Detection** with PaddleOCR
-- **Line Detection** (solid & dashed) with configurable parameters
+- **Line Detection** (solid & dashed), either the classical Hough path or a U-Net pipe-centreline segmenter
+- **Topology Assembly** — a junction-aware pipe graph, so tees and crossings become explicit nodes
 - **Interactive Editing** — add, delete, or modify symbols, text, and lines on a canvas
 - **Graph Export** — digitized P&ID as structured JSON (nodes + edges)
 
@@ -49,8 +50,13 @@ Download the following model files from Box and place them in the `PnIDAgent/` d
 |------|-------------|-------------|
 | `best.pt` | Fine-tuned YOLO symbol detector | `PnIDAgent/best.pt` |
 | `best_model.pth` | Fine-tuned SAM2 segmentation model | `PnIDAgent/best_model.pth` |
+| `line_seg_best.pt` | U-Net pipe-centreline segmenter (optional) | `PnIDAgent/line_seg_best.pt` |
 
 > **Box download link:** https://inlbox.box.com/s/lpd4mfxshhb8okjccbnkrevvq6mkl9ic
+
+`line_seg_best.pt` is only needed for the `unet` line source. Without it the Line
+Detection step uses the classical Hough path, so the app still runs end to end.
+Put it elsewhere by setting `LINE_SEG_MODEL_PATH`.
 
 ### 3. Create environment with uv
 
@@ -70,6 +76,26 @@ pnid_env\Scripts\activate
 uv pip install -r PnIDAgent/requirements.txt
 uv pip install -r requirements.txt
 ```
+
+#### Optional: separate OCR environment
+
+PaddleOCR and PyTorch do not always coexist. `paddleocr` pins an older OpenCV,
+and `paddlepaddle-gpu` downgrades the NCCL/cuDNN builds that `torch` expects, so
+on a GPU node installing both into one environment can break either the U-Net or
+the OCR step. If that happens, build a second environment with the PaddleOCR
+stack only and point the app at its interpreter:
+
+```bash
+uv venv pnid_ocr --python 3.9
+uv pip install --python pnid_ocr/bin/python paddleocr==2.7.3 paddlepaddle==3.3.0 \
+    'opencv-python-headless>=4.8,<4.13' 'numpy>=1.26,<3'
+
+OCR_PYTHON=$PWD/pnid_ocr/bin/python python app.py
+```
+
+The text and line detection step runs as a subprocess, so it is the only part
+that uses `OCR_PYTHON`; everything else stays in the main environment. On Apple
+Silicon note that `paddlepaddle==2.6.2` segfaults — use 3.1.0 or newer.
 
 ### 5. Run the app
 
@@ -95,6 +121,31 @@ This starts the Flask app and exposes it via Cloudflare Tunnel. Requires `cloudf
 3. **Edit** results interactively using the Symbols, Classification, Text, and Lines tabs
 4. **Export** the digitized graph as JSON or download all results as a ZIP
 
+Classification is optional. Going straight from Symbol Detection to Digitization
+labels every detection `symbol`, which is enough to build the connectivity graph.
+
+### Choosing a line extractor
+
+The dropdown next to the Text & Line Detection button selects the extractor:
+
+| Source | Needs | Notes |
+|--------|-------|-------|
+| `classical` | nothing extra | Hough transform plus collinear merging |
+| `unet` | `torch` + `line_seg_best.pt` | Better recall on dashed and broken pipe runs |
+
+Picking `unet` when the checkpoint or `torch` is missing falls back to the
+classical result and shows a warning rather than failing the step. The classical
+geometry is always kept alongside as `*_step4_lines_classical.json`, so the two
+can be compared on the same sheet.
+
+### Junctions in the graph view
+
+With the `topology` assembler the graph gains junction nodes where pipe runs
+meet. They are drawn as small grey diamonds, distinct from the square symbol
+nodes, and counted separately in the stats bar. Switch to `chains` (legacy
+endpoint chaining) by posting `{"assembler": "chains"}` to the digitize
+endpoint.
+
 ## Project Structure
 
 ```
@@ -113,7 +164,9 @@ PnIDAgentWebBased/
 │   ├── export.py           # ZIP/JSON export
 │   ├── image.py            # Image serving
 │   └── session_utils.py    # Shared session helpers
-├── pipeline/               # Pipeline integration wrapper
+├── pipeline/               # Pipeline integration wrappers
+│   ├── runner.py           # Step orchestration helpers
+│   └── unet_lines.py       # Single-image wrapper for the U-Net line segmenter
 ├── templates/              # HTML templates (index, workspace)
 ├── static/                 # Frontend assets (JS, CSS, Fabric.js)
 ├── symbols/                # Reference symbol libraries (Surry, NorthANA)
@@ -131,6 +184,12 @@ Key settings in `config.py`:
 | `DEFAULT_DEVICE` | `cuda` | PyTorch device (`cuda` or `cpu`) |
 | `DEFAULT_EMBEDDING_MODEL` | `clip` | Embedding model for classification |
 | `DEFAULT_CLUSTERING_METHOD` | `hdbscan` | Clustering algorithm |
+| `DEFAULT_LINE_SOURCE` | `classical` | Line extractor (`classical` or `unet`) |
+| `DEFAULT_UNET_TILE` | 1024 | U-Net inference tile size (px) |
+| `DEFAULT_UNET_MIN_LINE_LEN` | 100 | Shortest segment kept from the U-Net mask (px) |
+| `DEFAULT_ASSEMBLER` | `topology` | Graph assembler (`topology` or `chains`) |
+| `DEFAULT_SNAP_TOL` | 12 | Endpoint snapping radius (px) |
+| `DEFAULT_SYMBOL_PAD` | 6 | How far outside its box a symbol claims a dead end (px) |
 | `MAX_CONTENT_LENGTH` | 500 MB | Max upload file size |
 
 ### Environment Variables
@@ -138,6 +197,9 @@ Key settings in `config.py`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `URL_PREFIX` | `""` (empty) | URL path prefix for deploying behind a reverse proxy. Set this when hosting on a subpath (e.g. `/pnid_anno`). |
+| `LINE_SEG_MODEL_PATH` | `PnIDAgent/line_seg_best.pt` | U-Net pipe-centreline checkpoint. |
+| `OCR_PYTHON` | `""` (same interpreter) | Interpreter for the text and line subprocess, when PaddleOCR needs its own environment. |
+| `DEFAULT_LINE_SOURCE` | `classical` | Preselected line extractor in the UI. |
 
 **Example — deploy on HPC under `/pnid_anno`:**
 

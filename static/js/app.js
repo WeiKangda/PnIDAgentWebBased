@@ -342,8 +342,13 @@ const App = {
 
                     <div class="pipeline-step ${steps.text_detection && steps.line_detection ? 'complete' : ''}" id="pStep3">
                         <div class="step-num">3</div>
-                        <div class="step-name">Text & Line Detection</div>
+                        <div class="step-name">Text &amp; Line Detection</div>
                         <div class="step-status">${steps.text_detection ? 'Complete' : 'Pending'}</div>
+                        <select id="lineSourceSelect" class="btn" title="Pipe extractor"
+                                ${steps.text_detection ? 'disabled' : ''}>
+                            <option value="classical">Lines: classical</option>
+                            <option value="unet">Lines: U-Net</option>
+                        </select>
                         <button class="btn primary" onclick="App.runTextLines()" ${steps.text_detection ? 'disabled' : ''}>
                             ${steps.text_detection ? 'Done' : 'Run'}
                         </button>
@@ -437,9 +442,13 @@ const App = {
         step.querySelector('.step-status').textContent = 'Running...';
         step.querySelector('button').disabled = true;
 
+        const sel = document.getElementById('lineSourceSelect');
+        const lineSource = sel ? sel.value : 'classical';
+
         try {
-            const { task_id } = await API.post(API.sessionUrl('/run/text-lines'));
-            await API.pollTask(task_id, (status) => {
+            const { task_id } = await API.post(API.sessionUrl('/run/text-lines'),
+                                               { line_source: lineSource });
+            const final = await API.pollTask(task_id, (status) => {
                 step.querySelector('.step-status').textContent = status.progress || 'Running...';
             });
 
@@ -449,7 +458,14 @@ const App = {
             await this.loadSessionStatus();
             this._resetEditorLoaded();
             this._showPipelinePanel();
-            this.showToast('Text & line detection complete!', 'success');
+            // A U-Net request that fell back to classical still succeeds, so say so
+            // rather than letting the user believe they got the learned extractor.
+            if (final && final.warning) {
+                this.showToast(final.warning, 'warning');
+            } else {
+                const used = (final && final.line_source) || lineSource;
+                this.showToast(`Text & line detection complete (${used} lines)`, 'success');
+            }
         } catch (e) {
             step.classList.remove('running');
             step.querySelector('.step-status').textContent = 'Error: ' + e.message;

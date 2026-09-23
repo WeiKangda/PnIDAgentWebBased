@@ -35,6 +35,8 @@ const GraphViewer = {
     _panMoved: false,        // track if mouse moved during pan (to distinguish click from drag)
 
     NODE_SIZE: 48,
+    JUNCTION_SIZE: 22,            // pipe junctions carry a 2px bbox; render bigger
+    JUNCTION_COLOR: '#78909c',
 
     // Color palette for clusters
     COLORS: [
@@ -126,7 +128,13 @@ const GraphViewer = {
                 bbox: n.bbox,
                 captions: n.captions || [],
                 cluster_id: n.cluster_id,
-                color: this.categories[cat].color,
+                // The topology assembler emits pipe junctions (tees, crosses,
+                // corners) as nodes with a 2px bbox. They are graph structure, not
+                // detected symbols, so they get a fixed colour and a small marker
+                // instead of a patch.
+                isJunction: cat === 'junction',
+                color: cat === 'junction' ? this.JUNCTION_COLOR
+                                          : this.categories[cat].color,
                 x: 0, y: 0,
             };
             nodeMap[n.id] = node;
@@ -149,7 +157,14 @@ const GraphViewer = {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
         for (const node of this.nodes) {
-            if (node.bbox && node.bbox.length === 4) {
+            if (node.isJunction && node.bbox && node.bbox.length === 4) {
+                // 2px bbox would be invisible; give junctions a fixed marker size.
+                const [x1, y1, x2, y2] = node.bbox;
+                node.x = (x1 + x2) / 2;
+                node.y = (y1 + y2) / 2;
+                node.w = this.JUNCTION_SIZE;
+                node.h = this.JUNCTION_SIZE;
+            } else if (node.bbox && node.bbox.length === 4) {
                 const [x1, y1, x2, y2] = node.bbox;
                 node.x = (x1 + x2) / 2;
                 node.y = (y1 + y2) / 2;
@@ -188,17 +203,25 @@ const GraphViewer = {
 
         let legendHtml = '';
         for (const [cat, info] of Object.entries(this.categories)) {
+            const color = cat === 'junction' ? this.JUNCTION_COLOR : info.color;
             legendHtml += `<span class="graph-legend-item">
-                <span class="graph-legend-dot" style="background:${info.color}"></span>
+                <span class="graph-legend-dot" style="background:${color}"></span>
                 ${cat} (${info.count})
             </span>`;
         }
 
+        // Symbols and junctions are both nodes but mean different things, so count
+        // them separately: 122 pipe runs through 128 junctions reads very
+        // differently from 122 symbol-to-symbol links.
+        const nJct = this.nodes.filter(n => n.isJunction).length;
+        const nSym = this.nodes.length - nJct;
         statsEl.innerHTML = `
             <div class="graph-stats-left">
-                <span><strong>${this.nodes.length}</strong> Nodes</span>
+                <span><strong>${nSym}</strong> Symbols</span>
                 <span style="margin:0 8px;color:#555">|</span>
-                <span><strong>${this.links.length}</strong> Links</span>
+                <span><strong>${nJct}</strong> Junctions</span>
+                <span style="margin:0 8px;color:#555">|</span>
+                <span><strong>${this.links.length}</strong> Pipe runs</span>
             </div>
             <div class="graph-legend">${legendHtml}</div>
         `;
@@ -293,6 +316,27 @@ const GraphViewer = {
 
             const isSelected = node === this.selectedNode;
             const isAddLinkSource = node === this.addLinkSource;
+
+            // Junctions are graph structure, not symbols: a small diamond, no
+            // patch and no caption, so they read as pipe topology at a glance.
+            if (node.isJunction) {
+                const r = nw / 2;
+                ctx.beginPath();
+                ctx.moveTo(node.x, node.y - r);
+                ctx.lineTo(node.x + r, node.y);
+                ctx.lineTo(node.x, node.y + r);
+                ctx.lineTo(node.x - r, node.y);
+                ctx.closePath();
+                ctx.fillStyle = node.color;
+                ctx.fill();
+                if (isSelected || isAddLinkSource || node === this.hoveredNode) {
+                    ctx.strokeStyle = isSelected ? '#ef5350'
+                                    : isAddLinkSource ? '#66bb6a' : '#fff';
+                    ctx.lineWidth = 3 * invZ;
+                    ctx.stroke();
+                }
+                continue;
+            }
 
             // Border (cluster color, or selection highlight)
             let borderW, borderColor;

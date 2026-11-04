@@ -17,6 +17,10 @@ const TextEditor = {
     editingIdx: null,         // Index of detection currently being edited inline
     editRect: null,           // Fabric rect for the editing box (resizable)
     editInput: null,          // HTML input element overlaid on canvas
+    editSelect: null,         // HTML select for the reading direction, next to the input
+    // Reading direction of a text line, as in the dataset: 0 upright, cw = rotated clockwise
+    // (reads top to bottom), ccw = rotated counter-clockwise (reads bottom to top), 180 = upside down
+    ROTATIONS: ['0', 'cw', 'ccw', '180'],
 
     async load() {
         try {
@@ -95,7 +99,8 @@ const TextEditor = {
 
             if (this.showLabels && det.text) {
                 const fontSize = Math.max(10, Math.min(14, (x2 - x1) / det.text.length * 1.5));
-                const label = new fabric.Text(det.text, {
+                const rotTag = det.rot && det.rot !== '0' ? `[${det.rot}] ` : '';
+                const label = new fabric.Text(rotTag + det.text, {
                     left: x1, top: Math.max(0, y1 - fontSize - 4),
                     fontSize: fontSize,
                     fill: isSelected ? '#ff4444' : '#ffffff',
@@ -177,7 +182,7 @@ const TextEditor = {
             html += `<div class="list-item ${sel}" ${editing} onclick="TextEditor.toggleSelect(${i})"
                      ondblclick="TextEditor.enterEditMode(${i})">
                 <span class="label">#${i} ${text}</span>
-                <span class="score">${(det.score || 0).toFixed(2)}</span>
+                <span class="score">${det.rot && det.rot !== '0' ? det.rot + ' · ' : ''}${(det.score || 0).toFixed(2)}</span>
             </div>`;
         }
 
@@ -195,9 +200,10 @@ const TextEditor = {
             html += `<div class="details-panel">
                 <div class="detail-row"><span class="detail-label">Index:</span><span>#${idx}</span></div>
                 <div class="detail-row"><span class="detail-label">Text:</span><span>${det.text}</span></div>
+                <div class="detail-row"><span class="detail-label">Rotation:</span><span>${det.rot || '0'}</span></div>
                 <div class="detail-row"><span class="detail-label">Score:</span><span>${(det.score || 0).toFixed(4)}</span></div>
                 <div class="detail-row"><span class="detail-label">BBox:</span><span>${det.bbox.join(', ')}</span></div>
-                <div style="margin-top:6px;font-size:11px;color:#888">Double-click or press E to edit</div>
+                <div style="margin-top:6px;font-size:11px;color:#888">Double-click or press E to edit. Rotation buttons in the toolbar set the reading direction of the selection.</div>
             </div>`;
         } else if (this.selectedIndices.size > 1) {
             const combined = this.selectionOrder.map(i => this.detections[i].text || '').join(' ');
@@ -369,6 +375,26 @@ const TextEditor = {
 
         container.appendChild(input);
         this.editInput = input;
+
+        // Reading direction, next to the text
+        const select = document.createElement('select');
+        select.className = 'text-edit-inline-select';
+        select.title = 'Reading direction: 0 upright, cw rotated clockwise (reads top to bottom), ccw (reads bottom to top), 180 upside down';
+        for (const r of this.ROTATIONS) {
+            const o = document.createElement('option');
+            o.value = r;
+            o.textContent = 'rot ' + r;
+            if ((det.rot || '0') === r) o.selected = true;
+            select.appendChild(o);
+        }
+        select.addEventListener('change', () => { this.detections[this.editingIdx].rot = select.value; });
+        select.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); this._commitEdit(); }
+            if (e.key === 'Escape') { e.preventDefault(); this._exitEditMode(true); }
+            e.stopPropagation();
+        });
+        container.appendChild(select);
+        this.editSelect = select;
         this._repositionTextInput();
 
         // Focus after a short delay (let fabric events settle)
@@ -419,12 +445,21 @@ const TextEditor = {
         this.editInput.style.width = Math.round(inputWidth) + 'px';
         this.editInput.style.height = Math.round(inputHeight) + 'px';
         this.editInput.style.fontSize = fontSize + 'px';
+        if (this.editSelect) {
+            this.editSelect.style.left = Math.round(inputLeft + inputWidth + 6) + 'px';
+            this.editSelect.style.top = Math.round(inputTop) + 'px';
+            this.editSelect.style.height = Math.round(inputHeight) + 'px';
+        }
     },
 
     _removeTextInput() {
         if (this.editInput) {
             this.editInput.remove();
             this.editInput = null;
+        }
+        if (this.editSelect) {
+            this.editSelect.remove();
+            this.editSelect = null;
         }
     },
 
@@ -434,9 +469,12 @@ const TextEditor = {
         const idx = this.editingIdx;
         const det = this.detections[idx];
 
-        // Get final text from input
+        // Get final text and reading direction from the inputs
         if (this.editInput) {
             det.text = this.editInput.value;
+        }
+        if (this.editSelect) {
+            det.rot = this.editSelect.value;
         }
 
         // Get final bbox from the fabric rect
@@ -452,7 +490,7 @@ const TextEditor = {
         }
 
         // Save to server
-        API.put(API.sessionUrl(`/text/${idx}`), { text: det.text, bbox: det.bbox });
+        API.put(API.sessionUrl(`/text/${idx}`), { text: det.text, bbox: det.bbox, rot: det.rot || '0' });
 
         this._cleanupEditMode();
         this.render();
@@ -535,6 +573,25 @@ const TextEditor = {
         this.selectionOrder = [];
         await this._reload();
         App.setStatus('Combined text boxes');
+    },
+
+    /** Set the reading direction (0, cw, ccw, 180) of the selected text boxes, or of the box being edited. */
+    async setRotation(rot) {
+        if (this.editingIdx !== null) {
+            if (this.editSelect) this.editSelect.value = rot;
+            this.detections[this.editingIdx].rot = rot;
+            return;
+        }
+        if (this.selectedIndices.size === 0) {
+            App.showToast('Select one or more text boxes first', 'error');
+            return;
+        }
+        this.undoMgr.snapshot(this.detections);
+        for (const i of this.selectedIndices) this.detections[i].rot = rot;
+        await API.put(API.sessionUrl('/text/bulk'), { detections: this.detections });
+        this.render();
+        this.updateSidebar();
+        App.setStatus(`Rotation ${rot} set for ${this.selectedIndices.size} text box(es)`);
     },
 
     toggleLabels() {
@@ -635,6 +692,12 @@ const TextEditor = {
             <button class="btn danger" onclick="TextEditor.deleteSelected()">Delete</button>
             <div class="btn-sep"></div>
             <button class="btn" id="btnDrawText" onclick="TextEditor.toggleDraw()">Draw New Text</button>
+            <div class="btn-sep"></div>
+            <span style="color:#888;font-size:13px;padding:6px" title="Reading direction of the selected text: 0 upright, cw reads top to bottom, ccw reads bottom to top, 180 upside down">Rotation:</span>
+            <button class="btn" onclick="TextEditor.setRotation('0')">0</button>
+            <button class="btn" onclick="TextEditor.setRotation('cw')">cw &#8595;</button>
+            <button class="btn" onclick="TextEditor.setRotation('ccw')">ccw &#8593;</button>
+            <button class="btn" onclick="TextEditor.setRotation('180')">180</button>
             <div class="btn-sep"></div>
             <button class="btn" onclick="TextEditor.undo()">Undo</button>
             <button class="btn" onclick="TextEditor.redo()">Redo</button>

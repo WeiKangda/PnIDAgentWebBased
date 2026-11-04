@@ -95,6 +95,35 @@ This starts the Flask app and exposes it via Cloudflare Tunnel. Requires `cloudf
 3. **Edit** results interactively using the Symbols, Classification, Text, and Lines tabs
 4. **Export** the digitized graph as JSON or download all results as a ZIP
 
+## Manual annotation mode (no ML, offline)
+
+The tool also runs without the ML pipeline: no PnIDAgent submodule, no model weights, no GPU, no
+internet. Start it with
+
+```bash
+PNID_MANUAL_ONLY=1 python app.py
+```
+
+(it switches to this mode by itself when the `PnIDAgent/` submodule is not checked out). Every session
+then starts with empty result files, so the Symbols, Classification, Text, Lines and Graph tabs work right
+after an image is uploaded; the Pipeline tab is hidden and the pipeline endpoints answer 400. Only Flask,
+numpy and OpenCV are needed (`pip install flask numpy opencv-python-headless`).
+
+What the editors write:
+
+| tab | file | notes |
+|---|---|---|
+| Symbols | `<stem>_sam2_results.json` | one `masks_info` entry per box, image pixels |
+| Classification | `<stem>_classification.json` | `category` = `CLASS` or `CLASS/ACTUATOR` (e.g. `VLV_GATE/MOTOR`), chosen from the dropdowns fed by `data/classes.csv` and `data/actuators.csv`; new boxes start in the `unlabeled` cluster, select them and use *Label Selected…* |
+| Text | `<stem>_step3_text.json` | `bbox`, `text` and `rot` (`0`, `cw`, `ccw`, `180` = reading direction), image pixels (`scale` 1.0) |
+| Lines | `<stem>_step4_lines.json` | `solid` / `dashed` segments, image pixels |
+| Graph | `<stem>_digitized.json` | one node per box (kept in step with the Symbols tab), `links` = the connections drawn with *Add Connection*; the drawing is shown under the graph |
+
+Other additions: `PNID_OUTPUT_DIR=<folder>` adds a *Save to Output* button that copies the five result
+files there; `PNID_UPLOAD_DIR` moves the session store; `tools/new_session.py <image> [--id ID]` creates a
+session without the browser upload (optionally from an earlier result folder or ZIP) and prints its URL;
+`GET /api/label-sets` returns the class and actuator lists.
+
 ## Project Structure
 
 ```

@@ -208,3 +208,13 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar-track { background: #0f1529; }
 ::-webkit-scrollbar-thumb { background: #3a3a5c; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #5a5a7c; }
+
+/* Label selector (class / actuator dropdowns) */
+.label-select { width: 100%; padding: 6px 8px; background: #0f1529; border: 1px solid #3a3a5c; color: #e0e0e0; border-radius: 6px; font-size: 13px; margin-bottom: 6px; }
+.label-select:focus { outline: none; border-color: #4fc3f7; }
+.label-desc { font-size: 11px; color: #888; margin: 2px 0 8px; line-height: 1.4; }
+.label-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.label-row label { color: #888; font-size: 12px; width: 62px; flex-shrink: 0; }
+
+/* Rotation selector next to the inline text input */
+.text-edit-inline-select { position: absolute; z-index: 60; background: #16213e; border: 2px solid #ffca28; color: #e0e0e0; border-radius: 6px; font-size: 13px; padding: 0 6px; box-sizing: border-box; }

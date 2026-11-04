@@ -49,6 +49,8 @@ def update_text(session_id, idx):
 
     if 'text' in body:
         detections[idx]['text'] = body['text']
+    if 'rot' in body:
+        detections[idx]['rot'] = str(body['rot'])      # '0', 'cw', 'ccw' or '180'
     if 'bbox' in body:
         bbox = body['bbox']
         if isinstance(bbox, list) and len(bbox) == 4:
@@ -108,6 +110,7 @@ def create_text(session_id):
         'bbox': [x1, y1, x2, y2],
         'text': text,
         'score': 1.0,
+        'rot': str(body.get('rot', '0')),
     }
     detections.append(new_det)
     save_json_file(path, detections)
@@ -159,6 +162,7 @@ def combine_text(session_id):
         'bbox': [x1, y1, x2, y2],
         'text': combined_text,
         'score': avg_score,
+        'rot': to_combine[0].get('rot', '0'),
     }
 
     # Remove old (from end to preserve indices)

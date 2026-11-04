@@ -4,7 +4,7 @@ import os
 import sys
 
 # Add PnIDAgent to path for importing its modules
-from config import PNIDAGENT_DIR, UPLOAD_DIR, MAX_CONTENT_LENGTH, URL_PREFIX
+from config import PNIDAGENT_DIR, UPLOAD_DIR, MAX_CONTENT_LENGTH, URL_PREFIX, MANUAL_ONLY, OUTPUT_DIR
 if PNIDAGENT_DIR not in sys.path:
     sys.path.insert(0, PNIDAGENT_DIR)
 
@@ -46,7 +46,7 @@ def create_app():
     # Make URL_PREFIX available in all templates
     @app.context_processor
     def inject_url_prefix():
-        return dict(url_prefix=URL_PREFIX)
+        return dict(url_prefix=URL_PREFIX, manual_only=MANUAL_ONLY, output_dir=OUTPUT_DIR)
 
     # Page routes
     from flask import render_template, redirect, url_for
@@ -67,4 +67,6 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    if MANUAL_ONLY:
+        print('Manual annotation mode: ML pipeline disabled' + (f', results saved to {OUTPUT_DIR}' if OUTPUT_DIR else ''))
+    app.run(debug=os.environ.get('FLASK_DEBUG', '1') == '1', host='0.0.0.0', port=int(os.environ.get('PORT', '5001')))

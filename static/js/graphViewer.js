@@ -11,6 +11,8 @@ const GraphViewer = {
     links: [],
     categories: {},   // category -> { color, count }
     patchImages: {},   // mask_id -> Image
+    bgImage: null,     // the drawing, shown under nodes and links so connections can be checked against the pipes
+    showDrawing: true,
     undoMgr: new UndoManager(),
     width: 0,
     height: 0,
@@ -87,8 +89,9 @@ const GraphViewer = {
         this._processData(graphData);
         this._updateStats();
 
-        // Load patch images
+        // Load patch images and the drawing
         await this._loadPatches();
+        await this._loadBackground();
 
         // Position nodes from bboxes and fit to screen
         this._positionFromBboxes();
@@ -165,7 +168,13 @@ const GraphViewer = {
             if (node.y > maxY) maxY = node.y;
         }
 
-        // Store image extent (with padding)
+        // Store image extent (with padding); the whole drawing when it is available
+        if (this.bgImage) {
+            this.imgMinX = 0; this.imgMinY = 0;
+            this.imgMaxX = this.bgImage.width; this.imgMaxY = this.bgImage.height;
+            return;
+        }
+        if (minX === Infinity) { minX = 0; minY = 0; maxX = 1; maxY = 1; }
         const pad = 150;
         this.imgMinX = minX - pad;
         this.imgMinY = minY - pad;
@@ -221,6 +230,23 @@ const GraphViewer = {
         await Promise.all(promises);
     },
 
+    /** The page image (cached across tab switches). */
+    _loadBackground() {
+        if (this.bgImage) return Promise.resolve();
+        return new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => { this.bgImage = img; resolve(); };
+            img.onerror = () => resolve();
+            img.src = API.sessionUrl('/image');
+        });
+    },
+
+    toggleDrawing() {
+        this.showDrawing = !this.showDrawing;
+        document.getElementById('editorToolbar').innerHTML = this.getToolbar();
+        this.draw();
+    },
+
     draw() {
         const ctx = this.ctx;
         const w = this.width;
@@ -235,6 +261,13 @@ const GraphViewer = {
         ctx.scale(this.zoom, this.zoom);
 
         const invZ = 1 / this.zoom;
+
+        // The drawing under everything
+        if (this.showDrawing && this.bgImage) {
+            ctx.globalAlpha = 0.55;
+            ctx.drawImage(this.bgImage, 0, 0);
+            ctx.globalAlpha = 1;
+        }
 
         // Draw links
         for (const link of this.links) {
@@ -483,6 +516,8 @@ const GraphViewer = {
         newCanvas.addEventListener('mousemove', (e) => this._onMouseMove(e));
         newCanvas.addEventListener('mouseup', (e) => this._onMouseUp(e));
         newCanvas.addEventListener('wheel', (e) => this._onWheel(e));
+        // the cloned canvas starts blank: draw again (before, the graph only appeared on the first mouse move)
+        this.draw();
     },
 
     _screenToWorld(sx, sy) {
@@ -933,8 +968,10 @@ const GraphViewer = {
         const isAddLink = this.editMode === 'addLink';
         const inEdit = isSelect || isAddLink;
 
+        const manual = typeof MANUAL_ONLY !== 'undefined' && MANUAL_ONLY;
         return `
             <button class="btn" onclick="GraphViewer.fitToScreen()">Fit View</button>
+            <button class="btn ${this.showDrawing ? 'active' : ''}" onclick="GraphViewer.toggleDrawing()">Show Drawing</button>
             <div class="btn-sep"></div>
             <button class="btn ${isSelect ? 'active' : ''}" onclick="GraphViewer.setEditMode(${isSelect ? 'null' : "'select'"})">
                 ${isSelect ? 'Exit Select' : 'Select / Delete'}
@@ -947,7 +984,7 @@ const GraphViewer = {
             <button class="btn" onclick="GraphViewer.redo()">Redo</button>
             <div class="btn-sep"></div>
             <button class="btn primary" onclick="App.exportZip()">Export ZIP</button>
-            <button class="btn" onclick="App.runDigitize()" style="margin-left:4px">Re-generate Graph</button>
+            ${manual ? '' : '<button class="btn" onclick="App.runDigitize()" style="margin-left:4px">Re-generate Graph</button>'}
         `;
     },
 

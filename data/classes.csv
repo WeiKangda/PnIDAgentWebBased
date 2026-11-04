@@ -1,0 +1,52 @@
+class,definition,group,count
+VLV_GATE,Gate valve / generic two-way valve (plain bowtie),valve,1301
+VLV_GLOBE,Globe valve (bowtie with a dot at the waist),valve,131
+VLV_BUTTERFLY,Butterfly valve (diagonal with a centre dot between two ticks),valve,92
+VLV_BALL,Ball valve,valve,0
+VLV_PLUG,Plug valve,valve,0
+VLV_NEEDLE,Needle valve,valve,0
+VLV_DIAPHRAGM,Diaphragm valve,valve,0
+VLV_ANGLE,Angle valve,valve,5
+VLV_3WAY,Three-way valve,valve,9
+VLV_CHECK,"Check valve (incl. stop-check, swing check)",valve,530
+VLV_RELIEF,Safety / relief valve (incl. pilot-operated),valve,51
+VLV_REGULATOR,Self-actuated pressure regulator,valve,2
+DAMPER,Damper (HVAC),valve,73
+RUPTURE_DISC,Rupture disc,other,2
+PUMP,Pump,equipment,148
+COMPRESSOR,Compressor,equipment,12
+FAN,Fan / blower,equipment,48
+TURBINE,Turbine (incl. turbine-generator),equipment,22
+TANK,Tank / vessel / accumulator,equipment,76
+HX,Heat exchanger / cooler / feedwater heater,equipment,124
+CONDENSER,Condenser,equipment,11
+COIL,Heating or cooling coil (HVAC),equipment,40
+CHILLER,Chiller,equipment,11
+HUMIDIFIER,Humidifier (HVAC),equipment,4
+AHU,Air handling unit / cubicle cooler housing,equipment,9
+STEAM_GEN,Steam generator,equipment,73
+REACTOR,Reactor vessel,equipment,1
+PRESSURIZER,Pressurizer,equipment,1
+FILTER,Filter / strainer / adsorber / separator,equipment,109
+DEMIN,Demineralizer / ion exchanger,equipment,10
+DRYER,Air dryer,equipment,5
+ORIFICE,Orifice / flow element / venturi,equipment,103
+HEATER,Electric heater,equipment,4
+SPARGER,Spray nozzle / sparger,equipment,21
+SUMP,Sump,equipment,1
+TRAP,Steam trap,equipment,0
+INSTR,Instrument (bubble or box with a tag),instrument,78
+BREAKER,Circuit breaker,electrical,181
+TRANSFORMER,Transformer,electrical,37
+GENERATOR,Generator (incl. diesel generator),electrical,10
+MOTOR,Motor drawn on its own,electrical,17
+ENGINE,Diesel engine / prime mover drawn on its own,equipment,1
+BATTERY,Battery,electrical,3
+CHARGER,Battery charger / rectifier,electrical,3
+INVERTER,Inverter / UPS,electrical,6
+SWITCH,Switch / disconnect / transfer switch,electrical,5
+PANEL,Distribution panel / MCC / switchgear box,electrical,7
+PENETRATION,"Containment penetration (box on the containment boundary, e.g. 'PC')",other,17
+OFFPAGE,Off-page connector / system interface,other,52
+BLOCK,Labelled equipment block (named by its text),other,18
+OTHER,Other,other,24

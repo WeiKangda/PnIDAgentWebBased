@@ -90,8 +90,11 @@ const App = {
         // Compute coordinate scale: text/line data is in resized coords, image is original
         await this._computeCoordScale();
 
-        // Determine which tab to show first
-        if (this.sessionStatus && this.sessionStatus.steps_complete) {
+        // Determine which tab to show first (manual mode has no pipeline tab)
+        const manual = typeof MANUAL_ONLY !== 'undefined' && MANUAL_ONLY;
+        if (manual) {
+            this.switchTab('masks');
+        } else if (this.sessionStatus && this.sessionStatus.steps_complete) {
             const steps = this.sessionStatus.steps_complete;
             if (steps.symbol_detection) {
                 this.switchTab('masks');
@@ -154,6 +157,7 @@ const App = {
     },
 
     async switchTab(tabName) {
+        if (tabName === 'pipeline' && typeof MANUAL_ONLY !== 'undefined' && MANUAL_ONLY) tabName = 'masks';
         // Deactivate current editor
         if (this.currentTab === 'masks') MaskEditor.deactivate();
         if (this.currentTab === 'classification') ClassifierEditor.deactivate();
@@ -510,10 +514,11 @@ const App = {
                 overlay.style.cssText = 'position:absolute;inset:0;background:#111;overflow-y:auto;z-index:50;';
                 canvasContainer.appendChild(overlay);
             }
+            const manual = typeof MANUAL_ONLY !== 'undefined' && MANUAL_ONLY;
             overlay.innerHTML = `
                 <div class="pipeline-panel">
-                    <p style="color:#888">No graph data available.</p>
-                    <button class="btn primary" style="margin-top:16px" onclick="App.switchTab('pipeline')">Go to Pipeline</button>
+                    <p style="color:#888">${manual ? 'No symbols yet. Draw the symbol boxes in the Symbols tab first; they appear here as nodes to connect.' : 'No graph data available.'}</p>
+                    <button class="btn primary" style="margin-top:16px" onclick="App.switchTab('${manual ? 'masks' : 'pipeline'}')">${manual ? 'Go to Symbols' : 'Go to Pipeline'}</button>
                 </div>
             `;
         }
@@ -538,6 +543,17 @@ const App = {
 
     exportZip() {
         window.open(API.sessionUrl('/export/zip'), '_blank');
+    },
+
+    /** Copy the result files to the configured output folder (PNID_OUTPUT_DIR). */
+    async saveToOutput() {
+        try {
+            const res = await API.post(API.sessionUrl('/export/save'));
+            this.showToast(`Saved ${res.files.length} files to ${res.output_dir}`, 'success');
+            this.setStatus(`Saved to ${res.output_dir}: ${res.files.join(', ')}`);
+        } catch (e) {
+            this.showToast('Save failed: ' + e.message, 'error');
+        }
     },
 
     // UI helpers

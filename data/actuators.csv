@@ -1,0 +1,11 @@
+actuator,definition
+NONE,No operator drawn (manual / check / self-acting)
+MOTOR,Motor operator
+AIR,Air / pneumatic operator (diaphragm or piston)
+SOLENOID,Solenoid operator
+HYDRAULIC,Hydraulic operator
+EH,Electro-hydraulic operator
+UNSPEC,"Operator drawn, type not identifiable"
+TURBINE,Turbine driver (pumps)
+DIESEL,Diesel / engine driver (pumps)
+-,"Not applicable (not a valve, damper or pump)"

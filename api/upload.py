@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, jsonify
 from config import UPLOAD_DIR, ALLOWED_IMAGE_EXTENSIONS
-from api.session_utils import get_image_path, find_file
+from api.session_utils import get_image_path, find_file, ensure_result_files
 
 
 def _convert_pdf_page_to_png(pdf_path, output_dir, stem, page_num=0):
@@ -171,6 +171,7 @@ def upload_image():
                 try:
                     _convert_pdf_page_to_png(pdf_path, out_dir, file_stem, 0)
                     os.remove(pdf_path)
+                    ensure_result_files(session_dir)
                     # Mark conversion done
                     meta_path = os.path.join(session_dir, 'session.json')
                     with open(meta_path, 'r') as mf:
@@ -188,6 +189,7 @@ def upload_image():
             ).start()
     else:
         image_name = f.filename
+        ensure_result_files(session_dir)   # empty symbols / text / lines / graph: the editors work at once
 
     return jsonify({
         'session_id': session_id,
@@ -225,6 +227,7 @@ def pdf_select_page():
         png_path = _convert_pdf_page_to_png(pdf_path, session_dir, stem, page_num)
         os.remove(pdf_path)
         image_name = os.path.basename(png_path)
+        ensure_result_files(session_dir)
 
         # Update session metadata
         meta_path = os.path.join(session_dir, 'session.json')
@@ -311,6 +314,8 @@ def upload_results():
         stem = Path(image_path).stem
 
     image_name = os.path.basename(image_path) if image_path else 'unknown'
+    if image_path:
+        ensure_result_files(session_dir)   # a ZIP with only some layers still opens in every tab
 
     # Detect completed steps
     steps = _detect_completed_steps(session_dir)
@@ -350,6 +355,7 @@ def session_status(session_id):
         meta = json.load(f)
 
     # Re-detect steps (files may have been created since session start)
+    ensure_result_files(session_dir)
     meta['steps_complete'] = _detect_completed_steps(session_dir)
 
     # Save updated meta

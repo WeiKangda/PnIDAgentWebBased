@@ -10,13 +10,13 @@
     <div class="landing">
         <div class="landing-card">
             <h1>P&ID Annotation Tool</h1>
-            <p>Upload a P&ID image for AI-assisted annotation, or upload existing results to continue editing.</p>
+            <p>{% if manual_only %}Upload a P&ID image and annotate it by hand (symbols, classes, text, pipe lines, connectivity), or upload existing results to continue editing.{% else %}Upload a P&ID image for AI-assisted annotation, or upload existing results to continue editing.{% endif %}</p>
 
             <!-- Mode 1: Upload Image -->
             <div class="upload-zone" id="imageZone">
                 <div class="icon">&#128444;</div>
                 <h3>Upload P&ID Image</h3>
-                <p>PNG, JPG, TIFF, or PDF &mdash; the AI pipeline will detect symbols, text, and lines automatically</p>
+                <p>PNG, JPG, TIFF, or PDF{% if manual_only %} &mdash; opens the editors on an empty annotation{% else %} &mdash; the AI pipeline will detect symbols, text, and lines automatically{% endif %}</p>
                 <input type="file" id="imageInput" accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp,.pdf" style="display:none">
             </div>
 

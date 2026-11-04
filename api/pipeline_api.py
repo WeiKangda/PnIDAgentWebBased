@@ -12,7 +12,7 @@ from config import (
     DEFAULT_DETECTOR, DEFAULT_CONFIDENCE, DEFAULT_DEVICE,
     DEFAULT_EMBEDDING_MODEL, DEFAULT_CLUSTERING_METHOD, DEFAULT_SENSITIVITY,
     DEFAULT_TARGET_WIDTH, DEFAULT_NMS_IOU, DEFAULT_MIN_LINE_LEN,
-    DEFAULT_MAX_TEXT_DISTANCE, DEFAULT_MAX_LINE_DISTANCE,
+    DEFAULT_MAX_TEXT_DISTANCE, DEFAULT_MAX_LINE_DISTANCE, MANUAL_ONLY,
 )
 from api.session_utils import (
     get_session_dir, get_image_path, find_file, load_json_file,
@@ -23,6 +23,10 @@ pipeline_bp = Blueprint('pipeline', __name__)
 
 # Task tracking
 tasks = {}
+
+
+def _pipeline_disabled():
+    return jsonify({'error': 'The ML pipeline is disabled in manual annotation mode'}), 400
 
 
 def _update_task(task_id, **kwargs):
@@ -41,6 +45,8 @@ def task_status(task_id):
 @pipeline_bp.route('/session/<session_id>/run/detect', methods=['POST'])
 def run_detection(session_id):
     """Run symbol detection (async)."""
+    if MANUAL_ONLY:
+        return _pipeline_disabled()
     session_dir = get_session_dir(session_id)
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
@@ -165,6 +171,8 @@ def run_detection(session_id):
 @pipeline_bp.route('/session/<session_id>/run/text-lines', methods=['POST'])
 def run_text_lines(session_id):
     """Run text and line detection (async)."""
+    if MANUAL_ONLY:
+        return _pipeline_disabled()
     session_dir = get_session_dir(session_id)
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
@@ -224,6 +232,8 @@ def run_text_lines(session_id):
 @pipeline_bp.route('/session/<session_id>/run/classify', methods=['POST'])
 def run_classify(session_id):
     """Run auto-classification (embedding + clustering)."""
+    if MANUAL_ONLY:
+        return _pipeline_disabled()
     session_dir = get_session_dir(session_id)
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
@@ -348,6 +358,8 @@ def run_classify(session_id):
 @pipeline_bp.route('/session/<session_id>/run/digitize', methods=['POST'])
 def run_digitize(session_id):
     """Run final digitization."""
+    if MANUAL_ONLY:
+        return _pipeline_disabled()
     session_dir = get_session_dir(session_id)
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404

@@ -14,6 +14,7 @@
             <span class="session-info" id="sessionInfo">Loading...</span>
             <div class="actions">
                 <button class="btn" id="btnSaveAll" onclick="App.saveAll()">Save All</button>
+                {% if output_dir %}<button class="btn primary" id="btnSaveOutput" onclick="App.saveToOutput()" title="{{ output_dir }}">Save to Output</button>{% endif %}
                 <button class="btn primary" id="btnExport" onclick="App.exportZip()">Export ZIP</button>
                 <a href="{{ url_prefix }}/" class="btn">New Session</a>
             </div>
@@ -21,7 +22,7 @@
 
         <!-- Tab Bar -->
         <div class="tab-bar" id="tabBar">
-            <div class="tab" data-tab="pipeline">Pipeline</div>
+            {% if not manual_only %}<div class="tab" data-tab="pipeline">Pipeline</div>{% endif %}
             <div class="tab" data-tab="masks">Symbols</div>
             <div class="tab" data-tab="classification">Classification</div>
             <div class="tab" data-tab="text">Text</div>
@@ -66,6 +67,8 @@
     <script>
         const SESSION_ID = "{{ session_id }}";
         const URL_PREFIX = "{{ url_prefix }}";
+        const MANUAL_ONLY = {{ 'true' if manual_only else 'false' }};
+        const OUTPUT_DIR = {{ output_dir|tojson }};
     </script>
     <script src="{{ url_prefix }}/static/lib/fabric.min.js"></script>
     <script src="{{ url_prefix }}/static/js/api.js"></script>

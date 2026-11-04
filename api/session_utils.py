@@ -102,3 +102,48 @@ def get_image_path(session_dir):
             if not any(k in base for k in ['visualization', 'overlay', 'masks', 'clusters', 'categorized']):
                 return m
     return None
+
+
+RESULT_SUFFIXES = ('_sam2_results.json', '_classification.json', '_step3_text.json',
+                   '_step4_lines.json', '_digitized.json')
+
+
+def get_image_size(image_path):
+    """(width, height) of an image file."""
+    import cv2
+    img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError(f'cannot read image {image_path}')
+    h, w = img.shape[:2]
+    return w, h
+
+
+def ensure_result_files(session_dir):
+    """Create the result files that are still missing, empty, so that every editor tab works on a
+    session that never ran the ML pipeline (manual annotation).  Text and line coordinates of such a
+    session are image pixels (scale 1.0).  Returns the names of the files created."""
+    image_path = get_image_path(session_dir)
+    if not image_path:
+        return []
+    stem = os.path.splitext(os.path.basename(image_path))[0]
+    missing = [s for s in RESULT_SUFFIXES if not find_file(session_dir, s)]
+    if not missing:
+        return []
+    w, h = get_image_size(image_path)
+    image_name = os.path.basename(image_path)
+    empty = {
+        '_sam2_results.json': {'image_path': image_name, 'num_masks': 0,
+                               'processing_params': {'detector': 'manual'}, 'masks_info': []},
+        '_classification.json': {'num_symbols': 0, 'num_symbols_valid': 0, 'num_clusters': 0, 'categories': {},
+                                 'discarded_categories': {}, 'symbols': [], 'discarded_symbols': []},
+        '_step3_text.json': [],
+        '_step4_lines.json': {'solid': [], 'dashed': [], 'directions': {}, 'resized_shape': [h, w],
+                              'target_width': w, 'scale': 1.0, 'image_path': image_name},
+        '_digitized.json': {'nodes': [], 'links': [],
+                            'metadata': {'total_symbols': 0, 'total_connections': 0, 'source': 'manual'}},
+    }
+    created = []
+    for suffix in missing:
+        save_json_file(os.path.join(session_dir, stem + suffix), empty[suffix])
+        created.append(stem + suffix)
+    return created

@@ -10,6 +10,34 @@ from api.session_utils import (
 classification_bp = Blueprint('classification', __name__)
 
 
+def _count_categories(symbols):
+    categories = {}
+    for sym in symbols:
+        cat = sym.get('category', 'Unknown')
+        categories[cat] = categories.get(cat, 0) + 1
+    return categories
+
+
+@classification_bp.route('/label-sets', methods=['GET'])
+def label_sets():
+    """The class and actuator codes a symbol can be labeled with (data/classes.csv, data/actuators.csv).
+    A symbol's category is written as CLASS or CLASS/ACTUATOR, e.g. VLV_GATE/MOTOR."""
+    import csv
+    from config import DATA_DIR
+    classes, actuators = [], []
+    p = os.path.join(DATA_DIR, 'classes.csv')
+    if os.path.exists(p):
+        with open(p, encoding='utf-8') as f:
+            for r in csv.DictReader(f):
+                classes.append({'code': r['class'], 'definition': r.get('definition', ''), 'group': r.get('group', '')})
+    p = os.path.join(DATA_DIR, 'actuators.csv')
+    if os.path.exists(p):
+        with open(p, encoding='utf-8') as f:
+            for r in csv.DictReader(f):
+                actuators.append({'code': r['actuator'], 'definition': r.get('definition', '')})
+    return jsonify({'classes': classes, 'actuators': actuators})
+
+
 @classification_bp.route('/session/<session_id>/classification', methods=['GET'])
 def get_classification(session_id):
     """Get classification data (clusters and labels)."""
@@ -21,33 +49,53 @@ def get_classification(session_id):
     if not path:
         return jsonify({'error': 'No classification data found'}), 404
 
-    data = load_json_file(path)
+    data = load_json_file(path) or {}
 
     # Include all symbols (both valid and discarded) — user has already edited masks
     symbols = data.get('symbols', []) + data.get('discarded_symbols', [])
 
-    # Sync bbox data from masks (sam2_results) — user may have edited/rotated bboxes
+    # Keep the symbol list in step with the symbol boxes (sam2_results): every box has exactly one
+    # entry (a new box joins the "unlabeled" cluster, a deleted box drops out), and bbox fields follow
+    # the Symbols editor.  This is what makes the tab work on hand-drawn boxes without the pipeline.
     masks_path = find_file(session_dir, '_sam2_results.json')
-    bbox_synced = False
+    changed = False
     if masks_path:
-        masks_data = load_json_file(masks_path)
-        masks_by_id = {m['id']: m for m in masks_data.get('masks_info', [])}
-        sync_fields = ('bbox', 'center', 'area', 'angle', 'rotated_bbox')
+        masks = sorted((load_json_file(masks_path) or {}).get('masks_info', []), key=lambda m: m['id'])
+        masks_by_id = {m['id']: m for m in masks}
+        seen = set()
+        kept = []
         for sym in symbols:
             mid = sym.get('mask_id', sym.get('id'))
-            if mid not in masks_by_id:
+            if mid not in masks_by_id or mid in seen:
+                changed = True
                 continue
-            mask = masks_by_id[mid]
+            seen.add(mid)
+            kept.append(sym)
+        symbols = kept
+        unlabeled_cid = next((s.get('cluster_id') for s in symbols if s.get('category') == 'unlabeled'), None)
+        if unlabeled_cid is None:
+            unlabeled_cid = max((s.get('cluster_id', 0) for s in symbols), default=-1) + 1
+        next_id = max((s.get('id', -1) for s in symbols), default=-1) + 1
+        for m in masks:
+            if m['id'] in seen:
+                continue
+            symbols.append({'id': next_id, 'mask_id': m['id'], 'bbox': m['bbox'], 'area': m.get('area'),
+                            'category': 'unlabeled', 'cluster_id': unlabeled_cid})
+            next_id += 1
+            changed = True
+        sync_fields = ('bbox', 'center', 'area', 'angle', 'rotated_bbox')
+        for sym in symbols:
+            mask = masks_by_id[sym.get('mask_id', sym.get('id'))]
             for field in sync_fields:
-                if field in mask:
-                    if sym.get(field) != mask[field]:
-                        sym[field] = mask[field]
-                        bbox_synced = True
-
-        # Persist synced data back to classification JSON
-        if bbox_synced:
+                if field in mask and sym.get(field) != mask[field]:
+                    sym[field] = mask[field]
+                    changed = True
+        if changed:
             data['symbols'] = symbols
             data['discarded_symbols'] = []
+            data['categories'] = _count_categories(symbols)
+            data['num_clusters'] = len(set(s.get('cluster_id', 0) for s in symbols))
+            data['num_symbols_valid'] = len(symbols)
             save_json_file(path, data)
 
     clusters = {}
@@ -363,6 +411,9 @@ def merge_clusters(session_id):
 @classification_bp.route('/session/<session_id>/classification/auto-label', methods=['POST'])
 def auto_label(session_id):
     """Auto-label clusters using CLIP embedding similarity against reference symbol images."""
+    from config import MANUAL_ONLY
+    if MANUAL_ONLY:
+        return jsonify({'error': 'Auto-label needs the ML pipeline (disabled in manual mode)'}), 400
     import cv2
     import numpy as np
     import sys

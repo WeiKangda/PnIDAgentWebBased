@@ -74,19 +74,19 @@ def export_graph(session_id):
 
 def _get_graph_path(session_dir):
     """Find the digitized graph JSON path (the full one, else the LLM one)."""
-    path = find_file(session_dir, '_digitized.json')
+    path = find_file(session_dir, '_connections.json')
     if not path:
-        path = find_file(session_dir, '_digitized_llm.json')
+        path = find_file(session_dir, '_connections_llm.json')
     return path
 
 
 def _sync_graph_with_symbols(session_dir):
-    """Make the graph nodes match the symbol boxes (``_sam2_results.json``) and their labels
+    """Make the graph nodes match the symbol boxes (``_symbols.json``) and their labels
     (``_classification.json``): one node per box (new boxes get a node, deleted boxes lose theirs,
     bbox and category follow the editors), links kept while both ends exist.  Creates the graph file
     when the session has boxes but no graph yet.  Returns the graph data, or None when the session has
     no symbol file at all."""
-    masks_path = find_file(session_dir, '_sam2_results.json')
+    masks_path = find_file(session_dir, '_symbols.json')
     path = _get_graph_path(session_dir)
     if not masks_path:
         return load_json_file(path) if path else None
@@ -99,11 +99,11 @@ def _sync_graph_with_symbols(session_dir):
         for s in cls.get('symbols', []) + cls.get('discarded_symbols', []):
             categories[s.get('mask_id', s.get('id'))] = (s.get('category') or 'unlabeled', s.get('cluster_id'))
 
-    if path and path.endswith('_digitized.json'):
+    if path and path.endswith('_connections.json'):
         data = load_json_file(path) or {}
     else:
-        stem = get_image_stem(session_dir) or os.path.basename(masks_path)[:-len('_sam2_results.json')]
-        path = os.path.join(session_dir, f'{stem}_digitized.json')
+        stem = get_image_stem(session_dir) or os.path.basename(masks_path)[:-len('_symbols.json')]
+        path = os.path.join(session_dir, f'{stem}_connections.json')
         data = load_json_file(path) if os.path.exists(path) else {}
     nodes = data.get('nodes', []) or []
     links = data.get('links', []) or []

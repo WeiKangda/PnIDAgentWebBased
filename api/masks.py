@@ -21,7 +21,7 @@ def get_masks(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    results_path = find_file(session_dir, '_sam2_results.json')
+    results_path = find_file(session_dir, '_symbols.json')
     if not results_path:
         return jsonify({'error': 'No symbol detection results found'}), 404
 
@@ -41,7 +41,7 @@ def delete_mask(session_id, mask_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    results_path = find_file(session_dir, '_sam2_results.json')
+    results_path = find_file(session_dir, '_symbols.json')
     if not results_path:
         return jsonify({'error': 'No results found'}), 404
 
@@ -71,7 +71,7 @@ def create_mask(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    results_path = find_file(session_dir, '_sam2_results.json')
+    results_path = find_file(session_dir, '_symbols.json')
     if not results_path:
         return jsonify({'error': 'No results found'}), 404
 
@@ -115,7 +115,7 @@ def update_mask(session_id, mask_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    results_path = find_file(session_dir, '_sam2_results.json')
+    results_path = find_file(session_dir, '_symbols.json')
     if not results_path:
         return jsonify({'error': 'No results found'}), 404
 
@@ -159,7 +159,7 @@ def merge_masks(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    results_path = find_file(session_dir, '_sam2_results.json')
+    results_path = find_file(session_dir, '_symbols.json')
     if not results_path:
         return jsonify({'error': 'No results found'}), 404
 
@@ -214,7 +214,7 @@ def bulk_update_masks(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    results_path = find_file(session_dir, '_sam2_results.json')
+    results_path = find_file(session_dir, '_symbols.json')
     if not results_path:
         return jsonify({'error': 'No results found'}), 404
 
@@ -244,7 +244,7 @@ def get_mask_patch(session_id, mask_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    results_path = find_file(session_dir, '_sam2_results.json')
+    results_path = find_file(session_dir, '_symbols.json')
     image_path = get_image_path(session_dir)
     if not results_path or not image_path:
         return jsonify({'error': 'Data not found'}), 404

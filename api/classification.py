@@ -54,10 +54,10 @@ def get_classification(session_id):
     # Include all symbols (both valid and discarded) — user has already edited masks
     symbols = data.get('symbols', []) + data.get('discarded_symbols', [])
 
-    # Keep the symbol list in step with the symbol boxes (sam2_results): every box has exactly one
+    # Keep the symbol list in step with the symbol boxes (_symbols.json): every box has exactly one
     # entry (a new box joins the "unlabeled" cluster, a deleted box drops out), and bbox fields follow
     # the Symbols editor.  This is what makes the tab work on hand-drawn boxes without the pipeline.
-    masks_path = find_file(session_dir, '_sam2_results.json')
+    masks_path = find_file(session_dir, '_symbols.json')
     changed = False
     if masks_path:
         masks = sorted((load_json_file(masks_path) or {}).get('masks_info', []), key=lambda m: m['id'])
@@ -262,8 +262,8 @@ def discard_cluster(session_id, cid):
 
     save_json_file(path, data)
 
-    # Remove masks from sam2_results.json
-    results_path = find_file(session_dir, '_sam2_results.json')
+    # Remove masks from symbols.json
+    results_path = find_file(session_dir, '_symbols.json')
     if results_path:
         results_data = load_json_file(results_path)
         masks_info = results_data.get('masks_info', [])
@@ -323,8 +323,8 @@ def delete_symbols(session_id):
 
     save_json_file(path, data)
 
-    # Remove corresponding masks from sam2_results.json
-    results_path = find_file(session_dir, '_sam2_results.json')
+    # Remove corresponding masks from symbols.json
+    results_path = find_file(session_dir, '_symbols.json')
     if results_path:
         results_data = load_json_file(results_path)
         masks_info = results_data.get('masks_info', [])

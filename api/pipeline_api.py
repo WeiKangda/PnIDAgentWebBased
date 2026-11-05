@@ -75,7 +75,7 @@ def run_detection(session_id):
                 _update_task(task_id, status='error', error='Failed to load image')
                 return
 
-            results_json = os.path.join(session_dir, f'{img_name}_sam2_results.json')
+            results_json = os.path.join(session_dir, f'{img_name}_symbols.json')
             masks_output = os.path.join(session_dir, f'{img_name}_masks.npz')
 
             if detector == 'sam2':
@@ -244,7 +244,7 @@ def run_classify(session_id):
     sensitivity = body.get('sensitivity', DEFAULT_SENSITIVITY)
     device = body.get('device', DEFAULT_DEVICE)
 
-    results_json = find_file(session_dir, '_sam2_results.json')
+    results_json = find_file(session_dir, '_symbols.json')
     if not results_json:
         return jsonify({'error': 'Run symbol detection first'}), 400
 
@@ -369,9 +369,9 @@ def run_digitize(session_id):
     max_line_distance = body.get('max_line_distance', DEFAULT_MAX_LINE_DISTANCE)
 
     classification_path = find_file(session_dir, '_classification.json')
-    text_path = find_file(session_dir, '_step3_text.json')
-    lines_path = find_file(session_dir, '_step4_lines.json')
-    sam2_path = find_file(session_dir, '_sam2_results.json')
+    text_path = find_file(session_dir, '_text.json')
+    lines_path = find_file(session_dir, '_lines.json')
+    sam2_path = find_file(session_dir, '_symbols.json')
 
     try:
         from digitize_pnid import digitize_pnid as digitize_func
@@ -388,8 +388,8 @@ def run_digitize(session_id):
         from pathlib import Path
         img_stem = Path(get_image_path(session_dir) or '').stem or 'result'
 
-        full_path = os.path.join(session_dir, f'{img_stem}_digitized.json')
-        llm_path = os.path.join(session_dir, f'{img_stem}_digitized_llm.json')
+        full_path = os.path.join(session_dir, f'{img_stem}_connections.json')
+        llm_path = os.path.join(session_dir, f'{img_stem}_connections_llm.json')
 
         save_json_file(full_path, full_json)
         save_json_file(llm_path, llm_json)

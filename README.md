@@ -113,11 +113,11 @@ What the editors write:
 
 | tab | file | notes |
 |---|---|---|
-| Symbols | `<stem>_sam2_results.json` | one `masks_info` entry per box, image pixels |
+| Symbols | `<stem>_symbols.json` | one `masks_info` entry per box, image pixels |
 | Classification | `<stem>_classification.json` | `category` = `CLASS` or `CLASS/ACTUATOR` (e.g. `VLV_GATE/MOTOR`), chosen from the dropdowns fed by `data/classes.csv` and `data/actuators.csv`; new boxes start in the `unlabeled` cluster, select them and use *Label Selected…* |
-| Text | `<stem>_step3_text.json` | `bbox`, `text` and `rot` (`0`, `cw`, `ccw`, `180` = reading direction), image pixels (`scale` 1.0) |
-| Lines | `<stem>_step4_lines.json` | `solid` / `dashed` segments, image pixels |
-| Graph | `<stem>_digitized.json` | one node per box (kept in step with the Symbols tab), `links` = the connections drawn with *Add Connection*; the drawing is shown under the graph |
+| Text | `<stem>_text.json` | `bbox`, `text` and `rot` (`0`, `cw`, `ccw`, `180` = reading direction), image pixels (`scale` 1.0) |
+| Lines | `<stem>_lines.json` | `solid` / `dashed` segments, image pixels |
+| Graph | `<stem>_connections.json` | one node per box (kept in step with the Symbols tab), `links` = the connections drawn with *Add Connection*; the drawing is shown under the graph |
 
 Other additions: `PNID_OUTPUT_DIR=<folder>` adds a *Save to Output* button that copies the five result
 files there; `PNID_UPLOAD_DIR` moves the session store; `tools/new_session.py <image> [--id ID]` creates a

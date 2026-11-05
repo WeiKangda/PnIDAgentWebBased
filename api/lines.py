@@ -17,7 +17,7 @@ def get_lines(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step4_lines.json')
+    path = find_file(session_dir, '_lines.json')
     if not path:
         return jsonify({'error': 'No line detection data found'}), 404
 
@@ -48,7 +48,7 @@ def add_line(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step4_lines.json')
+    path = find_file(session_dir, '_lines.json')
     if not path:
         return jsonify({'error': 'No line data found'}), 404
 
@@ -83,7 +83,7 @@ def delete_line(session_id, line_type, idx):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step4_lines.json')
+    path = find_file(session_dir, '_lines.json')
     if not path:
         return jsonify({'error': 'No line data found'}), 404
 
@@ -130,7 +130,7 @@ def update_line(session_id, line_type, idx):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step4_lines.json')
+    path = find_file(session_dir, '_lines.json')
     if not path:
         return jsonify({'error': 'No line data found'}), 404
 
@@ -192,7 +192,7 @@ def cleanup_lines(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step4_lines.json')
+    path = find_file(session_dir, '_lines.json')
     if not path:
         return jsonify({'error': 'No line data found'}), 404
 
@@ -389,7 +389,7 @@ def bulk_delete_lines(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step4_lines.json')
+    path = find_file(session_dir, '_lines.json')
     if not path:
         return jsonify({'error': 'No line data found'}), 404
 
@@ -463,7 +463,7 @@ def bulk_update_lines(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step4_lines.json')
+    path = find_file(session_dir, '_lines.json')
     if not path:
         return jsonify({'error': 'No line data found'}), 404
 

@@ -15,7 +15,7 @@ def get_text(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step3_text.json')
+    path = find_file(session_dir, '_text.json')
     if not path:
         return jsonify({'error': 'No text detection data found'}), 404
 
@@ -35,7 +35,7 @@ def update_text(session_id, idx):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step3_text.json')
+    path = find_file(session_dir, '_text.json')
     if not path:
         return jsonify({'error': 'No text data found'}), 404
 
@@ -68,7 +68,7 @@ def delete_text(session_id, idx):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step3_text.json')
+    path = find_file(session_dir, '_text.json')
     if not path:
         return jsonify({'error': 'No text data found'}), 404
 
@@ -91,7 +91,7 @@ def create_text(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step3_text.json')
+    path = find_file(session_dir, '_text.json')
     if not path:
         return jsonify({'error': 'No text data found'}), 404
 
@@ -129,7 +129,7 @@ def combine_text(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step3_text.json')
+    path = find_file(session_dir, '_text.json')
     if not path:
         return jsonify({'error': 'No text data found'}), 404
 
@@ -196,7 +196,7 @@ def bulk_update_text(session_id):
     if not session_dir:
         return jsonify({'error': 'Session not found'}), 404
 
-    path = find_file(session_dir, '_step3_text.json')
+    path = find_file(session_dir, '_text.json')
     if not path:
         return jsonify({'error': 'No text data found'}), 404
 

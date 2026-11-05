@@ -100,15 +100,15 @@ def _detect_completed_steps(session_dir):
         'digitization': False,
     }
 
-    if find_file(session_dir, '_sam2_results.json'):
+    if find_file(session_dir, '_symbols.json'):
         steps['symbol_detection'] = True
     if find_file(session_dir, '_classification.json'):
         steps['classification'] = True
-    if find_file(session_dir, '_step3_text.json'):
+    if find_file(session_dir, '_text.json'):
         steps['text_detection'] = True
-    if find_file(session_dir, '_step4_lines.json'):
+    if find_file(session_dir, '_lines.json'):
         steps['line_detection'] = True
-    if find_file(session_dir, '_digitized.json'):
+    if find_file(session_dir, '_connections.json'):
         steps['digitization'] = True
 
     return steps
@@ -281,7 +281,7 @@ def upload_results():
     # If files are in a subdirectory, move them up
     subdirs = [d for d in os.listdir(session_dir)
                if os.path.isdir(os.path.join(session_dir, d)) and d != '__MACOSX']
-    if len(subdirs) == 1 and not find_file(session_dir, '_sam2_results.json'):
+    if len(subdirs) == 1 and not find_file(session_dir, '_symbols.json'):
         subdir = os.path.join(session_dir, subdirs[0])
         for item in os.listdir(subdir):
             src = os.path.join(subdir, item)
@@ -298,9 +298,9 @@ def upload_results():
     image_path = get_image_path(session_dir)
     if not image_path:
         # Try to infer stem from result files
-        results_file = find_file(session_dir, '_sam2_results.json')
+        results_file = find_file(session_dir, '_symbols.json')
         if results_file:
-            stem = os.path.basename(results_file).replace('_sam2_results.json', '')
+            stem = os.path.basename(results_file).replace('_symbols.json', '')
             # Try to find original image from the results JSON
             data = json.load(open(results_file))
             orig_image = data.get('image_path', '')

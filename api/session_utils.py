@@ -66,8 +66,8 @@ def save_json_file(path, data):
 
 
 def get_masks_info(session_dir):
-    """Load masks info from sam2_results.json."""
-    path = find_file(session_dir, '_sam2_results.json')
+    """Load masks info from symbols.json."""
+    path = find_file(session_dir, '_symbols.json')
     if not path:
         return None
     data = load_json_file(path)
@@ -75,14 +75,14 @@ def get_masks_info(session_dir):
 
 
 def get_text_data(session_dir):
-    """Load text detections from step3_text.json."""
-    path = find_file(session_dir, '_step3_text.json')
+    """Load text detections from text.json."""
+    path = find_file(session_dir, '_text.json')
     return load_json_file(path) if path else None
 
 
 def get_lines_data(session_dir):
-    """Load lines from step4_lines.json."""
-    path = find_file(session_dir, '_step4_lines.json')
+    """Load lines from lines.json."""
+    path = find_file(session_dir, '_lines.json')
     return load_json_file(path) if path else None
 
 
@@ -104,8 +104,8 @@ def get_image_path(session_dir):
     return None
 
 
-RESULT_SUFFIXES = ('_sam2_results.json', '_classification.json', '_step3_text.json',
-                   '_step4_lines.json', '_digitized.json')
+RESULT_SUFFIXES = ('_symbols.json', '_classification.json', '_text.json',
+                   '_lines.json', '_connections.json')
 
 
 def get_image_size(image_path):
@@ -132,14 +132,14 @@ def ensure_result_files(session_dir):
     w, h = get_image_size(image_path)
     image_name = os.path.basename(image_path)
     empty = {
-        '_sam2_results.json': {'image_path': image_name, 'num_masks': 0,
+        '_symbols.json': {'image_path': image_name, 'num_masks': 0,
                                'processing_params': {'detector': 'manual'}, 'masks_info': []},
         '_classification.json': {'num_symbols': 0, 'num_symbols_valid': 0, 'num_clusters': 0, 'categories': {},
                                  'discarded_categories': {}, 'symbols': [], 'discarded_symbols': []},
-        '_step3_text.json': [],
-        '_step4_lines.json': {'solid': [], 'dashed': [], 'directions': {}, 'resized_shape': [h, w],
+        '_text.json': [],
+        '_lines.json': {'solid': [], 'dashed': [], 'directions': {}, 'resized_shape': [h, w],
                               'target_width': w, 'scale': 1.0, 'image_path': image_name},
-        '_digitized.json': {'nodes': [], 'links': [],
+        '_connections.json': {'nodes': [], 'links': [],
                             'metadata': {'total_symbols': 0, 'total_connections': 0, 'source': 'manual'}},
     }
     created = []

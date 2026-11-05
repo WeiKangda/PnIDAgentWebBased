@@ -124,6 +124,25 @@ files there; `PNID_UPLOAD_DIR` moves the session store; `tools/new_session.py <i
 session without the browser upload (optionally from an earlier result folder or ZIP) and prints its URL;
 `GET /api/label-sets` returns the class and actuator lists.
 
+On a machine without internet or pip, put the wheels of flask, numpy and opencv-python-headless (with their
+dependencies) into `vendor/`, one `pip download` per Python version the machine may have, e.g.
+
+```bash
+pip download -r requirements-manual.txt -d vendor --only-binary=:all: --platform manylinux2014_x86_64 --python-version 3.10
+```
+
+and start the tool with
+
+```bash
+LIB="$(python3 tools/offline_deps.py)" && export PYTHONPATH="$LIB${PYTHONPATH:+:$PYTHONPATH}"
+PNID_MANUAL_ONLY=1 python3 app.py
+```
+
+`tools/offline_deps.py` prints nothing when the packages already import. Otherwise it unpacks the wheels that
+fit the running interpreter (Python tag, ABI, machine, glibc) into `pylib/<tag>-<machine>/`, checks the imports
+from there and prints that folder; a wheel is a ZIP of what pip would copy into site-packages, so no pip, venv
+or root is needed. `vendor/` and `pylib/` are ignored by git.
+
 ## Project Structure
 
 ```

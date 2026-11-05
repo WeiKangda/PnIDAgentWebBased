@@ -550,7 +550,8 @@ const App = {
         try {
             const res = await API.post(API.sessionUrl('/export/save'));
             this.showToast(`Saved ${res.files.length} files to ${res.output_dir}`, 'success');
-            this.setStatus(`Saved to ${res.output_dir}: ${res.files.join(', ')}`);
+            const folder = String(res.output_dir).replace(/[\\/]+$/, '').split(/[\\/]/).pop();
+            this.setStatus(`Saved ${res.files.length} files to ${folder}/`);
         } catch (e) {
             this.showToast('Save failed: ' + e.message, 'error');
         }

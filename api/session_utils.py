@@ -2,6 +2,7 @@
 import os
 import json
 import glob
+import threading
 import numpy as np
 from config import UPLOAD_DIR
 
@@ -59,10 +60,29 @@ def load_json_file(path):
         return json.load(f)
 
 
+_write_locks = {}
+_write_locks_guard = threading.Lock()
+
+
+def _lock_for(path):
+    with _write_locks_guard:
+        lock = _write_locks.get(path)
+        if lock is None:
+            lock = _write_locks[path] = threading.Lock()
+        return lock
+
+
 def save_json_file(path, data):
-    """Save data to JSON file."""
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    """Save data to a JSON file atomically: the content goes to a temporary file next to it, which then
+    replaces the file; writes to the same path are serialised.  Two overlapping requests can therefore
+    never leave a half-written or doubled file behind (a reader always sees a complete file)."""
+    tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
+    with _lock_for(os.path.abspath(path)):
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
 
 
 def get_masks_info(session_dir):

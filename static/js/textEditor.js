@@ -536,7 +536,6 @@ const TextEditor = {
     async deleteSelected() {
         if (this.selectedIndices.size === 0) return;
         if (this.editingIdx !== null) this._commitEdit();
-        if (!confirm(`Delete ${this.selectedIndices.size} text box(es)?`)) return;
 
         this.undoMgr.snapshot(this.detections);
 

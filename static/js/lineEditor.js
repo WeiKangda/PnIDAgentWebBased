@@ -407,7 +407,6 @@ const LineEditor = {
     async deleteSelected() {
         if (this.selectedKeys.size === 0) return;
         if (this.editMode) this.exitEditMode(false);
-        if (!confirm(`Delete ${this.selectedKeys.size} selected line(s)?`)) return;
 
         this._saveUndo();
 
@@ -589,7 +588,6 @@ const LineEditor = {
 
     async cleanupLines() {
         const total = this.solid.length + this.dashed.length;
-        if (!confirm(`Clean up ${total} lines?\n\nThis will:\n- Remove very short segments\n- Remove near-duplicate lines\n- Merge collinear connected segments\n\nDirection annotations will be reset.`)) return;
 
         this._saveUndo();
         App.setStatus('Cleaning up lines...');

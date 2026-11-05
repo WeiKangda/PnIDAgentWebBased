@@ -565,7 +565,6 @@ const ClassifierEditor = {
     async deleteSelectedSymbols() {
         if (this.selectedSymbolIds.size === 0) return;
         const count = this.selectedSymbolIds.size;
-        if (!confirm(`Delete ${count} selected symbol(s)?\n\nThis will remove them from both classification and symbol detection results.`)) return;
 
         this.undoMgr.snapshot({ clusters: this.clusters, symbols: this.symbols });
         await API.post(API.sessionUrl('/classification/delete-symbols'), {
@@ -580,7 +579,6 @@ const ClassifierEditor = {
         const cluster = this.clusters[this.currentClusterIdx];
         if (!cluster) return;
         const count = (cluster.symbol_ids || []).length;
-        if (!confirm(`Discard cluster #${cluster.id} "${cluster.label || 'unlabeled'}" (${count} symbols)?\n\nThis will remove these symbols from both classification and symbol detection results.`)) return;
 
         this.undoMgr.snapshot({ clusters: this.clusters, symbols: this.symbols });
         await API.post(API.sessionUrl(`/classification/clusters/${cluster.id}/discard`));

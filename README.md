@@ -115,7 +115,7 @@ What the editors write:
 |---|---|---|
 | Symbols | `<stem>_symbols.json` | one `masks_info` entry per box, image pixels |
 | Classification | `<stem>_classification.json` | `category` = `CLASS` or `CLASS/ACTUATOR` (e.g. `VLV_GATE/MOTOR`), chosen from the dropdowns fed by `data/classes.csv` and `data/actuators.csv`; new boxes start in the `unlabeled` cluster, select them and use *Label Selected…* |
-| Text | `<stem>_text.json` | `bbox`, `text` and `rot` (`0`, `cw`, `ccw`, `180` = reading direction), image pixels (`scale` 1.0) |
+| Text | `<stem>_text.json` | `bbox`, `text` and `rot` (reading direction: `0` upright, `cw` the text runs bottom to top, `ccw` top to bottom, `180` upside down), image pixels (`scale` 1.0) |
 | Lines | `<stem>_lines.json` | `solid` / `dashed` segments, image pixels |
 | Graph | `<stem>_connections.json` | one node per box (kept in step with the Symbols tab), `links` = the connections drawn with *Add Connection*; the drawing is shown under the graph |
 

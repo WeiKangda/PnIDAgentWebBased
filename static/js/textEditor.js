@@ -18,8 +18,9 @@ const TextEditor = {
     editRect: null,           // Fabric rect for the editing box (resizable)
     editInput: null,          // HTML input element overlaid on canvas
     editSelect: null,         // HTML select for the reading direction, next to the input
-    // Reading direction of a text line, as in the dataset: 0 upright, cw = rotated clockwise
-    // (reads top to bottom), ccw = rotated counter-clockwise (reads bottom to top), 180 = upside down
+    // Reading direction of a text line, as in the dataset: how the line has to be turned to read it upright.
+    // 0 upright, cw = turn it 90 degrees clockwise (the text runs bottom to top), ccw = turn it counter-clockwise
+    // (the text runs top to bottom), 180 = upside down
     ROTATIONS: ['0', 'cw', 'ccw', '180'],
 
     async load() {
@@ -379,7 +380,7 @@ const TextEditor = {
         // Reading direction, next to the text
         const select = document.createElement('select');
         select.className = 'text-edit-inline-select';
-        select.title = 'Reading direction: 0 upright, cw rotated clockwise (reads top to bottom), ccw (reads bottom to top), 180 upside down';
+        select.title = 'Reading direction: 0 upright, cw (turn clockwise to read: the text runs bottom to top), ccw (the text runs top to bottom), 180 upside down';
         for (const r of this.ROTATIONS) {
             const o = document.createElement('option');
             o.value = r;
@@ -692,10 +693,10 @@ const TextEditor = {
             <div class="btn-sep"></div>
             <button class="btn" id="btnDrawText" onclick="TextEditor.toggleDraw()">Draw New Text</button>
             <div class="btn-sep"></div>
-            <span style="color:#888;font-size:13px;padding:6px" title="Reading direction of the selected text: 0 upright, cw reads top to bottom, ccw reads bottom to top, 180 upside down">Rotation:</span>
+            <span style="color:#888;font-size:13px;padding:6px" title="Reading direction of the selected text: 0 upright, cw runs bottom to top (turn clockwise to read), ccw runs top to bottom, 180 upside down">Rotation:</span>
             <button class="btn" onclick="TextEditor.setRotation('0')">0</button>
-            <button class="btn" onclick="TextEditor.setRotation('cw')">cw &#8595;</button>
-            <button class="btn" onclick="TextEditor.setRotation('ccw')">ccw &#8593;</button>
+            <button class="btn" onclick="TextEditor.setRotation('cw')">cw &#8593;</button>
+            <button class="btn" onclick="TextEditor.setRotation('ccw')">ccw &#8595;</button>
             <button class="btn" onclick="TextEditor.setRotation('180')">180</button>
             <div class="btn-sep"></div>
             <button class="btn" onclick="TextEditor.undo()">Undo</button>
